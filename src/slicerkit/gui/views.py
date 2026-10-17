@@ -1,31 +1,60 @@
-"""Plate views: one sliced layer (LayerView) and the packed build from above (LayoutView).
+"""The views: one layer from above, the whole build from above, and the layer stack in 3D.
 
-Both share PlateView: model coordinates in mm with +y up, scroll to zoom, drag
-to pan, double-click to fit, a mm grid that adapts to the zoom, and the cursor
-position reported in mm.
+LayerView and LayoutView share PlateView: model coordinates in mm with +y up,
+scroll to zoom, drag to pan, double-click to fit, a mm grid that adapts to the
+zoom, and the cursor position shown in mm. LayerView can also play back the
+laser tracing the layer. StackView draws the sliced contours stacked in 3D; drag
+to orbit. All colours come from the theme.
 """
 from __future__ import annotations
 import math
 
 import numpy as np
-from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen, QPolygonF, QTransform
+from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import (QColor, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
+                           QTransform)
 from PySide6.QtWidgets import QToolTip, QWidget
 
 from ..layers import Layer
+from . import theme
 
-OUTER = QColor("#c2410c")
-HOLE = QColor("#2563eb")
-LEVELS = [QColor(c) for c in ("#2563eb", "#c2410c", "#059669", "#7c3aed", "#d97706", "#db2777")]
-MARGIN = 24                       # px around the fitted view
+LEVELS = ("#2563eb", "#ea580c", "#059669", "#7c3aed", "#d97706", "#db2777")
+MARGIN = 28                       # px around the fitted view
 GRID_STEPS = (0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000)
 MIN_GRID_PX = 36                  # grid lines at least this far apart on screen
+SCAN_SECONDS = 4.0                # length of one layer's laser playback
+FPS = 30
 
 
-def _cosmetic(color: QColor, width: float = 0, style=Qt.SolidLine) -> QPen:
-    pen = QPen(color, width, style)
+def _pen(color, width: float = 0, style=Qt.SolidLine) -> QPen:
+    pen = QPen(QColor(color), width, style)
     pen.setCosmetic(True)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
     return pen
+
+
+def _alpha(color: str, a: int) -> QColor:
+    c = QColor(color)
+    c.setAlpha(a)
+    return c
+
+
+def _mix(a: str, b: str, t: float) -> QColor:
+    ca, cb = QColor(a), QColor(b)
+    return QColor(round(ca.red() + (cb.red() - ca.red()) * t), round(ca.green() + (cb.green() - ca.green()) * t),
+                  round(ca.blue() + (cb.blue() - ca.blue()) * t))
+
+
+def _overlay_text(p: QPainter, widget: QWidget, text: str, corner: str) -> None:
+    """Small muted text in a corner of the widget (screen space)."""
+    p.resetTransform()
+    fm = QFontMetrics(widget.font())
+    w = fm.horizontalAdvance(text)
+    x = 12 if corner.endswith("left") else widget.width() - w - 12
+    y = widget.height() - 10 if corner.startswith("bottom") else fm.ascent() + 10
+    p.setPen(theme.color("muted"))
+    p.drawText(QPointF(x, y), text)
 
 
 class PlateView(QWidget):
@@ -43,8 +72,8 @@ class PlateView(QWidget):
         self._scale, self._tx, self._ty = 1.0, 0.0, 0.0
         self._user_moved = False
         self._drag = None
+        self._cursor: QPointF | None = None
 
-    # subclasses: the world rect worth fitting when there is no plate
     def content_bounds(self) -> QRectF | None:
         return None
 
@@ -95,14 +124,13 @@ class PlateView(QWidget):
         self.setCursor(Qt.ClosedHandCursor)
 
     def mouseMoveEvent(self, event):
-        w = self.to_world(event.position())
-        self.cursor_moved.emit(w.x(), w.y())
-        if self._drag is None:
-            return
-        d = event.position() - self._drag
-        self._tx, self._ty = self._tx + d.x(), self._ty + d.y()
-        self._drag = event.position()
-        self._user_moved = True
+        self._cursor = self.to_world(event.position())
+        self.cursor_moved.emit(self._cursor.x(), self._cursor.y())
+        if self._drag is not None:
+            d = event.position() - self._drag
+            self._tx, self._ty = self._tx + d.x(), self._ty + d.y()
+            self._drag = event.position()
+            self._user_moved = True
         self.update()
 
     def mouseReleaseEvent(self, event):
@@ -114,18 +142,20 @@ class PlateView(QWidget):
         self.fit()
 
     def leaveEvent(self, event):
+        self._cursor = None
         self.cursor_left.emit()
+        self.update()
         super().leaveEvent(event)
 
     # --- drawing -------------------------------------------------------------
 
     def paint_background(self, p: QPainter) -> None:
-        pal = self.palette()
-        p.fillRect(self.rect(), pal.window())
+        t = theme.current()
+        p.fillRect(self.rect(), QColor(t["canvas"]))
         p.setTransform(self.transform())
         if self.plate:
-            p.setPen(_cosmetic(pal.mid().color()))
-            p.setBrush(pal.base())
+            p.setPen(_pen(t["border"], 1))
+            p.setBrush(QColor(t["plate"]))
             p.drawRect(self._bounds)
             p.setBrush(Qt.NoBrush)
         if self.show_grid:
@@ -138,8 +168,6 @@ class PlateView(QWidget):
             area = area.intersected(self._bounds)
         if area.isEmpty():
             return
-        color = QColor(self.palette().mid().color())
-        color.setAlpha(70)
         lines = []
         x = math.ceil(area.left() / step) * step
         while x <= area.right():
@@ -149,20 +177,20 @@ class PlateView(QWidget):
         while y <= area.bottom():
             lines.append(QLineF(area.left(), y, area.right(), y))
             y += step
-        p.setPen(_cosmetic(color))
+        p.setPen(_pen(theme.current()["grid"]))
         p.drawLines(lines)
 
-    def paint_grid_label(self, p: QPainter) -> None:
-        if not self.show_grid:
-            return
-        p.resetTransform()
-        step = self.grid_step()
-        p.setPen(self.palette().placeholderText().color())
-        p.drawText(10, self.height() - 10, f"grid {step:g} mm")
+    def paint_overlays(self, p: QPainter) -> None:
+        if self.show_grid:
+            _overlay_text(p, self, f"grid {self.grid_step():g} mm", "bottom-left")
+        if self._cursor is not None:
+            _overlay_text(p, self, f"x {self._cursor.x():.2f}   y {self._cursor.y():.2f} mm", "bottom-right")
 
 
 class LayerView(PlateView):
-    """One sliced layer: outlines (holes in blue), hatches, travel moves, scan order."""
+    """One sliced layer: outlines (holes in blue), hatches, travel moves, scan order, playback."""
+
+    playback_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -173,19 +201,55 @@ class LayerView(PlateView):
         self.show_travel = False
         self.scan_order = False
         self._cache: dict[int, tuple] = {}
+        self._reveal: float | None = None  # share of the layer's scan shown while playing
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000 // FPS)
+        self._timer.timeout.connect(self._tick)
 
     def set_layers(self, layers: list[Layer], plate: tuple[float, float] | None = None) -> None:
+        self.stop_scan()
         self.layers, self.plate, self.index = layers, plate, 0
         self._cache.clear()
         self.refresh_bounds()
 
     def set_index(self, index: int) -> None:
         self.index = max(0, min(index, len(self.layers) - 1))
+        if self._reveal is not None:
+            self._reveal = 0.0  # replay the new layer
         self.update()
 
     def set_option(self, name: str, on: bool) -> None:
         setattr(self, name, on)
         self.update()
+
+    # --- laser playback ------------------------------------------------------------
+
+    def playing(self) -> bool:
+        return self._timer.isActive()
+
+    def play_scan(self) -> None:
+        if not self.layers:
+            return
+        self._reveal = 0.0
+        self._timer.start()
+        self.playback_changed.emit(True)
+        self.update()
+
+    def stop_scan(self) -> None:
+        was = self._timer.isActive()
+        self._timer.stop()
+        self._reveal = None
+        if was:
+            self.playback_changed.emit(False)
+        self.update()
+
+    def _tick(self) -> None:
+        self._reveal += 1 / (SCAN_SECONDS * FPS)
+        if self._reveal >= 1:
+            self.stop_scan()
+        self.update()
+
+    # --- drawing -------------------------------------------------------------
 
     def content_bounds(self) -> QRectF | None:
         pts = [np.asarray(c.points).reshape(-1, 2) for l in self.layers for c in l.contours]
@@ -219,27 +283,52 @@ class LayerView(PlateView):
         self.paint_background(p)
         if self.layers:
             self._paint_layer(p)
-        self.paint_grid_label(p)
+        self.paint_overlays(p)
 
     def _paint_layer(self, p: QPainter) -> None:
-        pal = self.palette()
+        t = theme.current()
         contours, hatches, travel = self._geometry(self.index)
-        if self.show_travel and travel:
-            p.setPen(_cosmetic(pal.mid().color(), 0, Qt.DashLine))
+        n_c = len(contours)
+        if self._reveal is None:
+            k = n_c + len(hatches)
+        else:
+            k = int(self._reveal * (n_c + len(hatches)))
+        shown_c, shown_h = contours[:min(k, n_c)], hatches[:max(0, k - n_c)]
+
+        if self.show_travel and travel and self._reveal is None:
+            p.setPen(_pen(t["muted"], 0, Qt.DashLine))
             p.drawLines(travel)
-        if self.show_hatches and hatches:
+        if self.show_hatches and shown_h:
             if self.scan_order:  # first vector yellow -> last vector purple
                 n = max(len(hatches) - 1, 1)
-                for i, line in enumerate(hatches):
-                    p.setPen(_cosmetic(QColor.fromHslF((50 + 230 * i / n) / 360, 0.85, 0.52)))
+                for i, line in enumerate(shown_h):
+                    p.setPen(_pen(QColor.fromHslF((50 + 230 * i / n) / 360, 0.85, 0.52)))
                     p.drawLine(line)
             else:
-                p.setPen(_cosmetic(pal.text().color()))
-                p.drawLines(hatches)
+                p.setPen(_pen(t["hatch"]))
+                p.drawLines(shown_h)
         if self.show_contours:
-            for poly, hole in contours:
-                p.setPen(_cosmetic(HOLE if hole else OUTER, 1.5))
+            for poly, hole in shown_c:
+                p.setPen(_pen(t["hole"] if hole else t["accent"], 1.6))
                 p.drawPolygon(poly)
+
+        if self._reveal is not None and k:  # the laser spot, glowing
+            if k <= n_c:
+                poly = contours[k - 1][0]
+                spot = poly.at(poly.size() - 1)
+            else:
+                spot = hatches[k - n_c - 1].p2()
+            s = self.transform().map(spot)
+            p.resetTransform()
+            glow = QRadialGradient(s, 18)
+            glow.setColorAt(0, _alpha("#fde68a", 230))
+            glow.setColorAt(0.25, _alpha("#fb923c", 160))
+            glow.setColorAt(1, _alpha("#fb923c", 0))
+            p.setPen(Qt.NoPen)
+            p.setBrush(glow)
+            p.drawEllipse(s, 18, 18)
+            p.setBrush(QColor("#fffbeb"))
+            p.drawEllipse(s, 2.5, 2.5)
 
 
 class LayoutView(PlateView):
@@ -263,7 +352,7 @@ class LayoutView(PlateView):
 
     def event(self, e):
         if e.type() == QEvent.ToolTip:
-            item = self.item_at(e.position() if hasattr(e, "position") else QPointF(e.pos()))
+            item = self.item_at(QPointF(e.pos()))
             if item:
                 rect, name, detail, _ = item
                 QToolTip.showText(e.globalPos(), f"{name}\n{detail}\n{rect.width():.1f} × {rect.height():.1f} mm "
@@ -287,23 +376,169 @@ class LayoutView(PlateView):
         self.paint_background(p)
         for rect, _, _, level in self.items:
             color = LEVELS[level % len(LEVELS)]
-            fill = QColor(color)
-            fill.setAlpha(40)
-            p.setPen(_cosmetic(color, 1.5))
-            p.setBrush(fill)
-            p.drawRect(rect)
+            p.setPen(_pen(color, 1.6))
+            p.setBrush(_alpha(color, 46))
+            p.drawRoundedRect(rect, 1.2, 1.2)
         p.setBrush(Qt.NoBrush)
         # labels in screen space so they stay readable at any zoom
-        t = self.transform()
+        tr = self.transform()
         p.resetTransform()
         fm = QFontMetrics(self.font())
         for rect, name, detail, _ in self.items:
-            box = t.mapRect(rect).adjusted(4, 4, -4, -4)
+            box = tr.mapRect(rect).adjusted(6, 5, -6, -5)
             if box.width() < 30 or box.height() < fm.height():
                 continue
-            p.setPen(self.palette().text().color())
             lines = [name, detail] if box.height() >= 2 * fm.height() else [name]
             for k, text in enumerate(lines):
+                p.setPen(theme.color("text" if k == 0 else "muted"))
                 text = fm.elidedText(text, Qt.ElideRight, int(box.width()))
                 p.drawText(QPointF(box.left(), box.top() + fm.ascent() + k * fm.height()), text)
-        self.paint_grid_label(p)
+        self.paint_overlays(p)
+
+
+class StackView(QWidget):
+    """The sliced contours stacked in 3D. Drag to orbit, scroll to zoom, double-click to reset.
+
+    Layers above the selected one are drawn faintly, so the selected layer reads
+    as a cut through the part.
+    """
+
+    MAX_POINTS = 60000          # points drawn per frame at rest
+    MAX_POINTS_DRAGGING = 18000  # ... and while orbiting, to stay smooth
+    MAX_CONTOUR_POINTS = 160
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(320, 240)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.layers: list[tuple[float, list[np.ndarray]]] = []
+        self.index = 0
+        self._center = np.zeros(3)
+        self._radius = 50.0
+        self._points = 0
+        self.reset_view()
+        self._drag = None
+
+    def reset_view(self) -> None:
+        self.yaw, self.elev, self.zoom = math.radians(-35), math.radians(32), 1.0
+        self.update()
+
+    def set_layers(self, layers: list[Layer]) -> None:
+        data, lo, hi = [], np.full(3, np.inf), np.full(3, -np.inf)
+        self._points = 0
+        for layer in layers:
+            contours = []
+            for c in layer.contours:
+                pts = np.asarray(c.points, dtype=float).reshape(-1, 2)
+                if len(pts) > self.MAX_CONTOUR_POINTS:
+                    pts = pts[np.linspace(0, len(pts) - 1, self.MAX_CONTOUR_POINTS).astype(int)]
+                contours.append(pts)
+                self._points += len(pts)
+                lo[:2], hi[:2] = np.minimum(lo[:2], pts.min(axis=0)), np.maximum(hi[:2], pts.max(axis=0))
+            lo[2], hi[2] = min(lo[2], layer.z), max(hi[2], layer.z)
+            data.append((float(layer.z), contours))
+        self.layers, self.index = data, 0
+        if np.isfinite(lo).all():
+            lo[2] = 0.0
+            self._center = (lo + hi) / 2
+            self._radius = max(float(np.linalg.norm(hi - lo)) / 2, 1.0)
+        self.update()
+
+    def set_index(self, index: int) -> None:
+        self.index = max(0, min(index, len(self.layers) - 1))
+        self.update()
+
+    # --- interaction -----------------------------------------------------------
+
+    def mousePressEvent(self, event):
+        self._drag = event.position()
+        self.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self, event):
+        if self._drag is None:
+            return
+        d = event.position() - self._drag
+        self._drag = event.position()
+        self.yaw += math.radians(d.x() * 0.5)
+        self.elev = min(max(self.elev + math.radians(d.y() * 0.4), 0.0), math.radians(90))
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        self._drag = None
+        self.unsetCursor()
+        self.update()  # full detail again
+
+    def wheelEvent(self, event):
+        self.zoom = min(max(self.zoom * 1.0015 ** event.angleDelta().y(), 0.2), 20)
+        self.update()
+
+    def mouseDoubleClickEvent(self, event):
+        self.reset_view()
+
+    # --- drawing -------------------------------------------------------------
+
+    def _projector(self):
+        cy, sy = math.cos(self.yaw), math.sin(self.yaw)
+        ce, se = math.cos(self.elev), math.sin(self.elev)
+        scale = self.zoom * min(self.width(), self.height()) * 0.42 / self._radius
+        ox, oy = self.width() / 2, self.height() / 2
+        cx, cyy, cz = self._center
+
+        def project(pts: np.ndarray, z: float) -> QPolygonF:
+            x, y = pts[:, 0] - cx, pts[:, 1] - cyy
+            across = x * cy - y * sy
+            depth = x * sy + y * cy
+            up = (z - cz) * ce + depth * se
+            sx, sy_ = ox + across * scale, oy - up * scale
+            return QPolygonF([QPointF(a, b) for a, b in zip(sx.tolist(), sy_.tolist())])
+
+        return project
+
+    def paintEvent(self, event):
+        t = theme.current()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor(t["canvas"]))
+        if not self.layers:
+            return
+        project = self._projector()
+
+        # the build plate under the part
+        lo = self._center[:2] - self._radius * 0.75
+        hi = self._center[:2] + self._radius * 0.75
+        plate = np.array([[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]])
+        p.setPen(_pen(t["border"], 1))
+        p.setBrush(_alpha(t["plate"], 255))
+        p.drawPolygon(project(plate, 0.0))
+        p.setBrush(Qt.NoBrush)
+
+        n = len(self.layers)
+        budget = self.MAX_POINTS_DRAGGING if self._drag is not None else self.MAX_POINTS
+        step = max(1, math.ceil(self._points / budget))
+        low, high = t["muted"], t["accent"]
+        for i in range(0, n, step):
+            if i == self.index:
+                continue
+            z, contours = self.layers[i]
+            if i < self.index:
+                color = _mix(low, high, 0.15 + 0.6 * i / max(n - 1, 1))
+                color.setAlpha(150)
+            else:
+                color = _alpha(t["muted"], 34)  # above the cut: a ghost
+            p.setPen(_pen(color, 1))
+            for pts in contours:
+                p.drawPolygon(project(pts, z))
+
+        # the selected layer: a filled, outlined cut. Outlines run counter-clockwise and
+        # holes clockwise, so non-zero winding leaves the holes open from any angle.
+        z, contours = self.layers[self.index]
+        cut = QPainterPath()
+        cut.setFillRule(Qt.WindingFill)
+        for pts in contours:
+            cut.addPolygon(project(pts, z))
+            cut.closeSubpath()
+        p.setPen(_pen(t["accent"], 2))
+        p.setBrush(_alpha(t["accent"], 60))
+        p.drawPath(cut)
+        _overlay_text(p, self, f"z {z:.2f} mm", "bottom-right")
+        _overlay_text(p, self, "drag to orbit · scroll to zoom · double-click to reset", "bottom-left")

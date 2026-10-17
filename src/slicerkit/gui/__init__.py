@@ -26,27 +26,6 @@ def _setup_logging() -> str:
     return path
 
 
-def _icon():
-    """A small app icon: powder layers with a laser line."""
-    from PySide6.QtCore import QRectF, Qt
-    from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-
-    pix = QPixmap(256, 256)
-    pix.fill(Qt.transparent)
-    p = QPainter(pix)
-    p.setRenderHint(QPainter.Antialiasing)
-    p.setBrush(QColor("#1f2937"))
-    p.setPen(Qt.NoPen)
-    p.drawRoundedRect(QRectF(8, 8, 240, 240), 48, 48)
-    for i, y in enumerate((150, 176, 202)):
-        p.setBrush(QColor("#e5e7eb") if i else QColor("#c2410c"))
-        p.drawRoundedRect(QRectF(48, y, 160, 16), 6, 6)
-    p.setPen(QPen(QColor("#fb923c"), 10, Qt.SolidLine, Qt.RoundCap))
-    p.drawLine(128, 48, 128, 140)
-    p.end()
-    return QIcon(pix)
-
-
 def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -59,7 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("slicerkit")
     app.setApplicationName("slicerkit")
     app.setApplicationVersion(__version__)
-    app.setWindowIcon(_icon())
+    from .theme import app_icon
+    app.setWindowIcon(app_icon())
     log_path = _setup_logging()
     log.info("slicerkit %s starting", __version__)
 

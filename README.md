@@ -41,24 +41,33 @@ Desktop app:
 slicerkit-gui                 # or: slicerkit-gui part.stl other.stl  |  slicerkit-gui job.slicerkit
 ```
 
-- **Parts**: add models (or drop them on the window), set copies per model. A
+- **Look**: a clean card layout with light and dark themes (follows the system;
+  the sun/moon button in the header switches), custom icons and one accent colour.
+- **Parts**: add models (or drop them on the window) and set copies per model. A
   warning icon marks a model with repairs or a likely units problem - hover it.
-- **Settings**: every setting has a tooltip; *Reset to defaults* restores them.
+- **Settings**: collapsible cards; every setting has a tooltip; *Reset to defaults*.
   The build volume starts as a 150 mm placeholder until the machine is known.
-- **Slice** (⌘R) runs in the background - the window stays usable and the job
-  can be cancelled. Models load in the background too.
-- **Layers** tab: step through layers (←/→, PgUp/PgDn ±10, Home/End), toggle
-  outlines, hatches, travel moves, scan order and the mm grid; the cursor
-  position shows in mm. **Build layout** tab: every packed part from above,
-  with its name and height range (hover for details).
+- **Slice** (⌘R) runs in the background with progress and Cancel; models load in
+  the background too. Headline numbers appear as tiles: layers, build height,
+  laser time, parts, packing density, energy density. The full report is under
+  *Details*.
+- **Views**, with a vertical layer slider (←/→, PgUp/PgDn ±10, Home/End):
+  - *Layers*: one layer from above - outlines, hatches, travel moves, scan order,
+    mm grid; cursor position in mm. **Play laser** (Space) animates the laser
+    tracing the layer in true scan order.
+  - *3D*: the sliced contours stacked in 3D; drag to orbit, scroll to zoom. The
+    selected layer is a filled cut, layers above it are ghosted.
+  - *Build layout*: every packed part from above, labelled and coloured by
+    stacking level (hover for details).
+  - **Play layers** runs through the whole build like a flip-book.
 - **Out of date**: change a part or setting after slicing and a banner says so;
   exporting is blocked until you slice again.
 - **Projects** (`.slicerkit`, JSON): save/open the parts list and every
   setting; model paths are stored relative to the project file. Open Recent,
   and a prompt before unsaved changes are lost.
 - **Export** (⌘E) writes the `.cli`; nothing is written until then.
-- The window remembers its size, last folder and last settings. Unexpected
-  errors show their details and go to a log file (*Help ▸ Show Log File*).
+- The window remembers its size, theme, last folder and last settings.
+  Unexpected errors show their details and go to a log file (*Help ▸ Show Log File*).
 
 Command line:
 
@@ -173,7 +182,7 @@ src/slicerkit/
   pipeline.py    # orchestrates the stages
   summary.py     # the text report shared by CLI and GUI
   project.py     # .slicerkit project files (parts + settings, JSON)
-  gui/           # PySide6 desktop app: window, panels, views, background tasks
+  gui/           # PySide6 app: window, panels, views (layer/3D/layout), theme, widgets, tasks
   preview.py     # interactive HTML layer viewer
   __main__.py    # CLI entry point
 tests/           # round-trip export, slicing correctness

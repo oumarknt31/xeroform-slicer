@@ -6,15 +6,16 @@ from dataclasses import fields
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox,
-    QHBoxLayout, QHeaderView, QPushButton, QSpinBox, QStyle, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView,
+    QLabel, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..config import SliceConfig
 from ..part import HUGE_MM, TINY_MM, MeshReport
 from ..project import ProjectPart
 from ..scan_order import SCAN_ORDERS
+from . import theme
+from .widgets import Card, tool_button
 
 PLACEHOLDER_VOLUME = (150.0, 150.0, 150.0)  # until the machine's build volume is known
 
@@ -52,16 +53,19 @@ NUMBER_FIELDS = {
 }
 
 
-class PartsPanel(QGroupBox):
+class PartsPanel(Card):
     """The models to print, with a copy count each. Emits `changed` on any edit."""
 
     changed = Signal()
     add_requested = Signal()
 
     def __init__(self, parent=None):
-        super().__init__("Parts", parent)
+        super().__init__("Parts", collapsible=False, parent=parent)
         self.scale = 1.0
-        col = QVBoxLayout(self)
+        col = self.body
+        self.count = QLabel()
+        self.count.setObjectName("hint")
+        self.trailing.addWidget(self.count)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["", "Model", "Copies", "Size (mm)"])
         head = self.table.horizontalHeader()
@@ -73,20 +77,33 @@ class PartsPanel(QGroupBox):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setMinimumHeight(150)
-        self.table.setToolTip("Drop model files here or use Add…")
+        self.table.setShowGrid(False)
+        self.table.setFocusPolicy(Qt.ClickFocus)
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.setToolTip("Drop model files on the window or use Add")
         col.addWidget(self.table)
+        self.empty_hint = QLabel("No models yet.\nDrop STL, OBJ, PLY or 3MF files on the window,\n"
+                                 "or click Add models.")
+        self.empty_hint.setObjectName("hint")
+        self.empty_hint.setAlignment(Qt.AlignCenter)
+        self.empty_hint.setMinimumHeight(110)
+        col.addWidget(self.empty_hint)
         QShortcut(QKeySequence.Delete, self.table, self.remove_selected)
         QShortcut(QKeySequence(Qt.Key_Backspace), self.table, self.remove_selected)
 
         row = QHBoxLayout()
-        add, remove, clear = QPushButton("Add…"), QPushButton("Remove"), QPushButton("Clear")
-        add.clicked.connect(self.add_requested)
-        remove.clicked.connect(self.remove_selected)
-        clear.clicked.connect(self.clear)
-        for b in (add, remove, clear):
-            row.addWidget(b)
+        self.add_button = tool_button("add", "Add models", "Add STL, OBJ, PLY or 3MF models (⌘I)")
+        self.remove_button = tool_button("trash", "Remove", "Remove the selected models (Delete)")
+        self.clear_button = tool_button("clear", "Clear", "Remove all models")
+        self.add_button.clicked.connect(self.add_requested)
+        self.remove_button.clicked.connect(self.remove_selected)
+        self.clear_button.clicked.connect(self.clear)
+        row.addWidget(self.add_button)
         row.addStretch()
+        row.addWidget(self.remove_button)
+        row.addWidget(self.clear_button)
         col.addLayout(row)
+        self._update_count()
 
     # --- rows ------------------------------------------------------------------
 
@@ -101,10 +118,12 @@ class PartsPanel(QGroupBox):
         spin.setRange(1, 999)
         spin.setValue(copies)
         spin.setToolTip("How many copies of this model to pack into the build")
+        spin.valueChanged.connect(self._update_count)
         spin.valueChanged.connect(self.changed)
         self.table.setCellWidget(r, 2, spin)
         self.table.setItem(r, 3, QTableWidgetItem())
         self._refresh_row(r)
+        self._update_count()
         self.changed.emit()
 
     def set_scale(self, scale: float) -> None:
@@ -124,7 +143,8 @@ class PartsPanel(QGroupBox):
         elif largest > HUGE_MM:
             notes.append(f"{largest:.0f} mm across at this scale - check the units.")
         warn = bool(report.warnings) or largest < TINY_MM or largest > HUGE_MM
-        icon = self.style().standardIcon(QStyle.SP_MessageBoxWarning if warn else QStyle.SP_DialogApplyButton)
+        t = theme.current()
+        icon = theme.icon("warning", "#d97706") if warn else theme.icon("ok", t["ok"])
         status = self.table.item(r, 0)
         status.setIcon(icon)
         tip = "\n".join([path, *notes]) if notes else f"{path}\nNo problems found."
@@ -136,12 +156,28 @@ class PartsPanel(QGroupBox):
         for r in rows:
             self.table.removeRow(r)
         if rows:
+            self._update_count()
             self.changed.emit()
 
     def clear(self) -> None:
         if self.table.rowCount():
             self.table.setRowCount(0)
+            self._update_count()
             self.changed.emit()
+
+    def _update_count(self) -> None:
+        n = sum(p.copies for p in self.parts())
+        self.count.setText(f"{n} part{'s' if n != 1 else ''}" if n else "")
+        self.table.setVisible(bool(n))
+        self.empty_hint.setVisible(not n)
+
+    def restyle(self) -> None:
+        super().restyle()
+        if hasattr(self, "table"):
+            for b in (self.add_button, self.remove_button, self.clear_button):
+                b.setIcon(theme.icon(b.property("iconName")))
+            for r in range(self.table.rowCount()):
+                self._refresh_row(r)
 
     # --- what to print -----------------------------------------------------------
 
@@ -162,11 +198,25 @@ class SettingsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.spins: dict[str, QDoubleSpinBox] = {}
+        self.cards: list[Card] = []
         col = QVBoxLayout(self)
         col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(10)
         for title, specs in NUMBER_FIELDS.items():
-            group = QGroupBox(title + (" - placeholders until the laser is chosen" if title == "Laser" else ""))
-            form = QFormLayout(group)
+            group = Card(title)
+            self.cards.append(group)
+            if title == "Laser":
+                note = QLabel("placeholders")
+                note.setObjectName("hint")
+                note.setToolTip("Real values come once the laser is chosen")
+                group.trailing.addWidget(note)
+            holder = QWidget()
+            form = QFormLayout(holder)
+            form.setContentsMargins(0, 0, 0, 0)
+            form.setHorizontalSpacing(12)
+            form.setVerticalSpacing(8)
+            form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            group.body.addWidget(holder)
             for name, label, lo, hi, step, decimals, suffix, tip in specs:
                 spin = QDoubleSpinBox()
                 spin.setRange(lo, hi)
@@ -211,11 +261,18 @@ class SettingsPanel(QWidget):
                 form.addRow(self.use_volume)
                 form.addRow(vol)
             col.addWidget(group)
-        reset = QPushButton("Reset to defaults")
-        reset.setToolTip("Put every setting back to its default")
+        reset = tool_button("clear", "Reset to defaults", "Put every setting back to its default")
+        reset.setIcon(theme.icon("auto"))
+        reset.setProperty("iconName", "auto")
+        self.reset_button = reset
         reset.clicked.connect(lambda: self.set_config(gui_defaults()))
         col.addWidget(reset, 0, Qt.AlignLeft)
         self.set_config(gui_defaults())
+
+    def restyle(self) -> None:
+        for card in self.cards:
+            card.restyle()
+        self.reset_button.setIcon(theme.icon("auto"))
 
     def _volume_toggled(self, on: bool) -> None:
         for s in self.volume:

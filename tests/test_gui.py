@@ -34,6 +34,8 @@ def window(app, monkeypatch):
     yield w
     w.dirty = False
     w.close()
+    w.deleteLater()
+    QtWidgets.QApplication.processEvents()
 
 
 @pytest.fixture
@@ -207,3 +209,92 @@ def test_unexpected_error_shows_details(window, models, monkeypatch):
     wait(window.start_slicing())
     assert "Unexpected error" in window.report.toPlainText()
     assert "ZeroDivisionError" in shown[0]
+
+
+# --- look & feel, new views ---------------------------------------------------
+
+def test_theme_switching(window):
+    from slicerkit.gui import theme
+    window.set_theme("dark")
+    assert theme.mode() == "dark" and theme.current()["bg"] == theme.DARK["bg"]
+    assert QSettings().value("theme") == "dark"
+    window._cycle_theme()  # dark -> system
+    assert theme.mode() == "system"
+    window.set_theme("light")
+    assert QtWidgets.QApplication.instance().palette().window().color().name() == theme.LIGHT["bg"]
+
+
+def test_empty_states(window, models):
+    assert window.pages.currentIndex() == 0 and window.empty.title.text() == "Drop models here"
+    assert window.parts.table.isHidden() and not window.parts.empty_hint.isHidden()
+    wait(window.add_models([models[0]]))
+    assert window.empty.title.text() == "Ready to slice" and window.parts.empty_hint.isHidden()
+    window.settings.spins["layer_thickness"].setValue(1)
+    wait(window.start_slicing())
+    assert window.pages.currentIndex() == 1
+
+
+def test_stat_tiles(window, models):
+    sliced(window, models, copies=(2, 1))
+    tiles = {k: t.value.text() for k, t in window.tiles.items()}
+    assert tiles["layers"] == "19" and tiles["parts"] == "3" and tiles["height"] == "20.0 mm"
+    assert tiles["density"].endswith("%") and tiles["energy"] == "0.050 J/mm²"
+    window.new_project()
+    assert window.tiles["layers"].value.text() == "–"
+
+
+def test_3d_stack_view(window, models):
+    sliced(window, models)
+    window.view_switch.set_index(1)
+    assert window.views.currentWidget() is window.stack_view
+    assert len(window.stack_view.layers) == 19
+    window.slider.setValue(7)
+    assert window.stack_view.index == 7
+    yaw = window.stack_view.yaw
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtCore import QEvent
+    sv = window.stack_view
+    for kind, x in [(QEvent.MouseButtonPress, 100), (QEvent.MouseMove, 160), (QEvent.MouseButtonRelease, 160)]:
+        ev = QMouseEvent(kind, QPointF(x, 100), QPointF(x, 100), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+        {QEvent.MouseButtonPress: sv.mousePressEvent, QEvent.MouseMove: sv.mouseMoveEvent,
+         QEvent.MouseButtonRelease: sv.mouseReleaseEvent}[kind](ev)
+    assert sv.yaw != yaw  # orbited
+    assert not sv.grab().isNull()
+    window.view_switch.set_index(2)
+    assert window.slider.isHidden()  # layers don't apply to the layout view
+
+
+def test_laser_playback(window, models):
+    sliced(window, models)
+    window._toggle_scan()
+    assert window.view.playing() and window.scan_button.text() == "Stop laser"
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    assert 0 < window.view._reveal < 1
+    assert not window.view.grab().isNull()  # draws the partial layer and the spot
+    window._toggle_scan()
+    assert not window.view.playing() and window.scan_button.text() == "Play laser"
+
+
+def test_flipbook(window, models):
+    sliced(window, models)
+    window._toggle_flipbook()
+    assert window.flipbook.isActive() and window.flip_button.text() == "Pause layers"
+    loop = QEventLoop()
+    QTimer.singleShot(250, loop.quit)
+    loop.exec()
+    assert window.slider.value() > 0
+    window._toggle_flipbook()
+    assert not window.flipbook.isActive()
+    window._goto(10 ** 9)
+    window._toggle_flipbook()  # from the top, it starts over
+    assert window.slider.value() <= 1
+    window._stop_playback()
+
+
+def test_toast(window):
+    from slicerkit.gui.widgets import Toast
+    window.toast("Hello")
+    toasts = window.centralWidget().findChildren(Toast)
+    assert toasts and not toasts[-1].isHidden()  # (test windows are never on screen)
