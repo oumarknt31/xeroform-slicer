@@ -13,6 +13,7 @@ dependencies = [
     "PythonSLM>=0.6",
     "trimesh>=4.0,<6",   # PySLM 0.6 uses Path.to_planar, deprecated in trimesh
     "numpy>=1.24",
+    "lxml>=4.9",          # trimesh needs it to read .3mf
 ]
 
 [project.optional-dependencies]

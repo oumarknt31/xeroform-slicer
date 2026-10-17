@@ -1,7 +1,23 @@
 """Hatch/contour settings, wrapped around PySLM's Hatcher."""
 from __future__ import annotations
 from dataclasses import dataclass
+import numpy as np
 from pyslm import hatching
+
+
+class _Hatcher(hatching.Hatcher):
+    """PySLM's Hatcher, fixed for regions too narrow for any hatch line.
+
+    When no hatch line crosses a fill region (thin walls, small pins), PySLM's
+    clipLines returns an empty-but-nested array that hatch() then indexes into
+    and crashes. Returning a truly empty array makes hatch() skip the fill, so
+    the region is scanned by its contours only - which is what we want.
+    """
+
+    @staticmethod
+    def clipLines(paths, lines):
+        clipped = hatching.Hatcher.clipLines(paths, lines)
+        return clipped if clipped.size else np.array([])
 
 
 @dataclass
@@ -26,7 +42,7 @@ class HatchSettings:
         return (self.hatch_angle + index * self.hatch_angle_increment) % 180.0
 
     def make_hatcher(self):
-        h = hatching.Hatcher()
+        h = _Hatcher()
         h.hatchAngle = self.hatch_angle
         h.hatchDistance = self.hatch_distance
         h.numInnerContours = self.num_inner_contours

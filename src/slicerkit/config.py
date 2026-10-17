@@ -16,6 +16,10 @@ class SliceConfig:
     num_inner_contours: int = 1
     num_outer_contours: int = 1
 
+    # model placement
+    scale: float = 1.0                # e.g. 25.4 for a model drawn in inches
+    build_volume: tuple[float, float, float] | None = None  # (x, y, z) mm; None = don't check
+
     # laser - placeholders until the laser is chosen and tuned on hardware
     contour_power: float = 4.0        # W
     contour_speed: float = 400.0      # mm/s
@@ -28,13 +32,17 @@ class SliceConfig:
     units: float = 1.0                # mm per coordinate unit (confirm w/ firmware)
 
     def __post_init__(self):
-        for name in ("layer_thickness", "hatch_distance", "units",
+        for name in ("layer_thickness", "hatch_distance", "units", "scale",
                      "contour_speed", "hatch_speed", "jump_speed"):
             if not getattr(self, name) > 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)!r}")
         for name in ("contour_power", "hatch_power"):
             if not getattr(self, name) >= 0:
                 raise ValueError(f"{name} must be >= 0, got {getattr(self, name)!r}")
+        if self.build_volume is not None:
+            if len(self.build_volume) != 3 or not all(v > 0 for v in self.build_volume):
+                raise ValueError(f"build_volume must be 3 sizes > 0 (x, y, z), got {self.build_volume!r}")
+            self.build_volume = tuple(float(v) for v in self.build_volume)
 
     def laser_settings(self) -> LaserSettings:
         return LaserSettings(

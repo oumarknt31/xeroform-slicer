@@ -42,10 +42,29 @@ slicerkit model.stl -o model.cli --layer 0.1 --hatch-distance 0.2 --hatch-rotati
 # also write an interactive layer preview (open it in any browser):
 slicerkit model.stl -o model.cli --preview model.html
 
+# model in inches? check it fits the machine?
+slicerkit model.stl -o model.cli --scale 25.4 --build-volume 150 150 150
+
 # laser settings (W, mm/s) - defaults are placeholders until the laser is chosen:
 slicerkit model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
           --contour-power 4 --contour-speed 400 --jump-speed 2000
 ```
+
+### Model checks
+
+Input can be STL, OBJ, PLY or 3MF. Before slicing, slicerkit:
+
+- **repairs** what is safe to fix automatically - zero-area/duplicate triangles,
+  small holes in the surface, inside-out faces - and lists what it changed;
+- **refuses** models it can't slice correctly (big gaps in the surface, no
+  volume, unreadable files) with a message saying what to do;
+- **warns** when the size suggests wrong units (STL has none - inch CAD parts
+  arrive 25.4x too small); fix with `--scale`;
+- **centres** the part on the platform: x = y = 0 is the middle of the plate,
+  z = 0 its bottom. With `--build-volume X Y Z` it also refuses parts that
+  don't fit.
+
+### Output
 
 Every run prints an estimated laser time (scanning only - no recoating or
 heating) and the fill **energy density** `P / (v * h)` in J/mm², the main number
@@ -77,7 +96,7 @@ write_preview(layers, "model.html")
 
 ```
 src/slicerkit/
-  part.py        # load + validate mesh (wraps PySLM)
+  part.py        # load, repair, check + place the mesh (wraps PySLM)
   slicing.py     # part -> layers   (the PySLM -> slicerkit translation lives here)
   hatching.py    # hatch/contour settings (wraps PySLM Hatcher)
   layers.py      # slicerkit's own Layer / Contour / Hatch / ScanParams data model
@@ -101,6 +120,7 @@ examples/        # sample_cube.py
 - [x] hatch angle rotates per layer (`hatch_angle_increment`, default 67°; 0 = fixed)
 - [x] interactive HTML layer preview (`--preview`)
 - [x] laser power / speed per vector type, scan-time estimate, energy density
+- [x] mesh checks/repairs, units warning, platform centring, build-volume check
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [ ] 3D part nesting; PySide/Qt GUI on top of the engine

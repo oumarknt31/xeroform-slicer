@@ -2,8 +2,10 @@
 from __future__ import annotations
 import argparse
 import os
+import sys
 
-from .pipeline import slice_file
+from .pipeline import slice_job
+from .part import MeshError
 from .config import SliceConfig
 from .preview import write_preview
 from .laser import estimate_scan_time
@@ -14,7 +16,7 @@ def main(argv=None) -> int:
         prog="slicerkit",
         description="SLS slicer: turn an STL model into laser tool-paths (.cli).",
     )
-    ap.add_argument("input", help="input mesh (.stl)")
+    ap.add_argument("input", help="input mesh (.stl, .obj, .3mf, ...)")
     ap.add_argument("-o", "--output", required=True, help="output file (.cli)")
     ap.add_argument("--layer", type=float, default=0.1, help="layer thickness in mm")
     ap.add_argument("--hatch-distance", type=float, default=0.2, help="hatch spacing in mm")
@@ -22,6 +24,10 @@ def main(argv=None) -> int:
     ap.add_argument("--hatch-rotation", type=float, default=67.0,
                     help="hatch angle added per layer in deg (0 = fixed)")
     ap.add_argument("--units", type=float, default=1.0, help="mm per .cli coordinate unit")
+    ap.add_argument("--scale", type=float, default=1.0,
+                    help="scale the model, e.g. 25.4 if it was made in inches")
+    ap.add_argument("--build-volume", type=float, nargs=3, metavar=("X", "Y", "Z"),
+                    help="printable size in mm; refuse models that don't fit")
     laser = ap.add_argument_group("laser (placeholder defaults - tune on hardware)")
     defaults = SliceConfig()
     laser.add_argument("--hatch-power", type=float, default=defaults.hatch_power, help="fill power in W")
@@ -49,10 +55,25 @@ def main(argv=None) -> int:
             contour_power=args.contour_power,
             contour_speed=args.contour_speed,
             jump_speed=args.jump_speed,
+            scale=args.scale,
+            build_volume=tuple(args.build_volume) if args.build_volume else None,
         )
     except ValueError as e:
         ap.error(str(e))
-    layers = slice_file(args.input, args.output, cfg)
+    try:
+        result = slice_job(args.input, args.output, cfg)
+    except MeshError as e:
+        print(f"slicerkit: error: {e}", file=sys.stderr)
+        return 1
+    layers, report = result.layers, result.report
+    x, y, z = report.size
+    bodies = f"{report.bodies} bodies" if report.bodies != 1 else "1 body"
+    print(f"Model: {x:.1f} x {y:.1f} x {z:.1f} mm, {report.volume:.0f} mm^3, "
+          f"{report.triangles} triangles, {bodies}")
+    for repair in report.repairs:
+        print(f"  repaired: {repair}")
+    for warning in report.warnings:
+        print(f"  warning: {warning}")
     vectors = sum(l.num_hatch_vectors for l in layers)
     print(f"Sliced {len(layers)} layers ({vectors} hatch vectors) -> {args.output}")
     seconds = estimate_scan_time(layers, cfg.jump_speed)
