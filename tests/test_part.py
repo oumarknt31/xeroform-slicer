@@ -176,3 +176,16 @@ def test_cli_reports_model_and_repairs(tmp_path, capsys):
 def test_cli_mesh_error_exits_cleanly(tmp_path, capsys):
     assert main([str(tmp_path / "nope.stl"), "-o", str(tmp_path / "x.cli")]) == 1
     assert "slicerkit: error: File not found" in capsys.readouterr().err
+
+
+def test_files_referenced_inside_a_model_are_never_opened(tmp_path, monkeypatch):
+    """An OBJ may name a material file anywhere - even \\\\host\\share - and must not reach it."""
+    import trimesh.resolvers
+    opened = []
+    monkeypatch.setattr(trimesh.resolvers.FilePathResolver, "get", lambda self, name: opened.append(name))
+    obj = tmp_path / "evil.obj"
+    obj.write_text("mtllib \\\\attacker\\share\\x.mtl\n"
+                   "v 0 0 0\nv 10 0 0\nv 0 10 0\nv 0 0 10\n"
+                   "f 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n")
+    part = Part(str(obj))
+    assert part.report.triangles == 4 and opened == []

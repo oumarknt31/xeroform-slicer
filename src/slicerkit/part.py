@@ -19,6 +19,32 @@ TINY_MM = 10.0
 HUGE_MM = 1000.0
 
 
+class _NoExternalFiles(trimesh.resolvers.Resolver):
+    """Refuse every file a model refers to (OBJ materials, textures, ...).
+
+    Slicing needs only the geometry, which every supported format carries in the
+    model file itself. Following references would let a crafted model make us
+    open arbitrary paths - on Windows a network path (\\\\host\\share) leaks the
+    user's credentials just by being opened.
+    """
+
+    def __init__(self):
+        self.refused: list[str] = []
+
+    def get(self, name):
+        self.refused.append(str(name))
+        raise FileNotFoundError(name)  # loaders treat this as "asset not found"
+
+    def write(self, name, data):
+        raise PermissionError(name)
+
+    def namespaced(self, namespace):
+        return self
+
+    def keys(self):
+        return []
+
+
 class MeshError(ValueError):
     """The model can't be sliced. The message says why and what to do about it."""
 
@@ -102,7 +128,7 @@ def load_mesh(path: str) -> trimesh.Trimesh:
     if not os.path.isfile(path):
         raise MeshError(f"File not found: {path}")
     try:
-        mesh = trimesh.load(path, force="mesh", process=False)
+        mesh = trimesh.load(path, force="mesh", process=False, resolver=_NoExternalFiles())
     except Exception as e:
         raise MeshError(f"Could not read {path} as a 3D model: {e}") from e
     if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
