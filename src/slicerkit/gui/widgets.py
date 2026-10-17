@@ -2,12 +2,32 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QToolButton, QVBoxLayout, QWidget,
+    QButtonGroup, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+    QPushButton, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
 )
 
 from . import theme
+
+
+def shadow(widget: QWidget, color: str | None = None, blur: int = 22, dy: int = 4, alpha: int = 110) -> None:
+    """A soft drop shadow (or, with an accent colour, a glow). Only for small widgets:
+    Qt re-renders a shadowed widget offscreen on every repaint."""
+    effect = QGraphicsDropShadowEffect(widget)
+    c = QColor(color or theme.current()["shadow"])
+    c.setAlpha(alpha)
+    effect.setColor(c)
+    effect.setBlurRadius(blur)
+    effect.setOffset(0, dy)
+    widget.setGraphicsEffect(effect)
+
+
+def spaced(widget: QWidget, spacing: float = 1.2) -> None:
+    """Letter-spaced text, for small uppercase labels."""
+    font = widget.font()
+    font.setLetterSpacing(QFont.AbsoluteSpacing, spacing)
+    widget.setFont(font)
 
 
 class Card(QFrame):
@@ -22,7 +42,8 @@ class Card(QFrame):
         head = QHBoxLayout()
         self.header = QToolButton()
         self.header.setObjectName("cardHeader")
-        self.header.setText(title)
+        self.header.setText(title.upper())
+        spaced(self.header)
         self.header.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.header.setIconSize(QSize(14, 14))
         self.header.setCheckable(collapsible)
@@ -53,21 +74,29 @@ class Card(QFrame):
 
 
 class StatTile(QFrame):
-    """One headline number with a caption, e.g. "Laser time  1h 12m"."""
+    """One headline number with a caption, e.g. "LASER TIME  1h 12m", on an accent bar."""
 
     def __init__(self, label: str, parent=None):
         super().__init__(parent)
         self.setObjectName("tile")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        col = QVBoxLayout(self)
-        col.setContentsMargins(12, 8, 12, 8)
-        col.setSpacing(0)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(10, 10, 12, 10)
+        row.setSpacing(10)
+        bar = QFrame()
+        bar.setObjectName("tileBar")
+        row.addWidget(bar)
+        col = QVBoxLayout()
+        col.setSpacing(1)
         self.caption = QLabel(label.upper())
         self.caption.setObjectName("tileLabel")
+        spaced(self.caption)
         self.value = QLabel("–")
         self.value.setObjectName("tileValue")
         col.addWidget(self.caption)
         col.addWidget(self.value)
+        row.addLayout(col, 1)
+        shadow(self, blur=18, dy=3, alpha=90)
 
     def set(self, value: str, tip: str = "") -> None:
         self.value.setText(value)
@@ -101,6 +130,7 @@ class Segmented(QFrame):
             row.addWidget(b)
         self.buttons[0].setChecked(True)
         self.group.idToggled.connect(lambda i, on: on and self.changed.emit(i))
+        self.group.idToggled.connect(lambda *_: self.restyle())
         self.restyle()
 
     def index(self) -> int:
@@ -111,7 +141,7 @@ class Segmented(QFrame):
 
     def restyle(self) -> None:
         for b, name in zip(self.buttons, self._icons):
-            b.setIcon(theme.icon(name))
+            b.setIcon(theme.icon(name, theme.current()["accent"] if b.isChecked() else theme.current()["muted"]))
 
 
 def chip(text: str, checked: bool, tip: str = "") -> QToolButton:
@@ -184,7 +214,7 @@ class Toast(QFrame):
         super().__init__(parent)
         self.setObjectName("toast")
         row = QHBoxLayout(self)
-        row.setContentsMargins(12, 8, 14, 8)
+        row.setContentsMargins(14, 10, 16, 10)
         mark = QLabel()
         mark.setPixmap(theme.icon(icon_name, theme.current()["toast_text"]).pixmap(16, 16))
         label = QLabel(text)
@@ -194,12 +224,14 @@ class Toast(QFrame):
         row.addWidget(label)
         self.adjustSize()
         self._place()
-        self.effect = QGraphicsOpacityEffect(self)
+        self.effect = QGraphicsOpacityEffect(self)  # (a widget takes one effect: fade, no shadow)
         self.setGraphicsEffect(self.effect)
         self.show()
         self.raise_()
         self._fade(0.0, 1.0)
-        QTimer.singleShot(ms, lambda: self._fade(1.0, 0.0, self.deleteLater))
+        # the toast is the timer's context: if it is destroyed first (its window closed),
+        # Qt cancels the timer instead of calling into a deleted widget
+        QTimer.singleShot(ms, self, lambda: self._fade(1.0, 0.0, self.deleteLater))
 
     def _place(self) -> None:
         p = self.parentWidget()

@@ -66,7 +66,8 @@ def sliced(window, models, copies=(1, 1)):
 
 def test_defaults(window):
     assert window.settings.config() == gui_defaults()
-    assert window.windowTitle() == "Untitled[*] — slicerkit" and not window.isWindowModified()
+    assert window.windowTitle() == "Untitled[*] — XeroForm" and not window.isWindowModified()
+    assert window.dirty_dot.isHidden()
     assert not window.act_export.isEnabled()
 
 
@@ -134,11 +135,11 @@ def test_changes_after_slicing_make_it_stale(window, models):
 def test_project_save_and_open(window, models, tmp_path, monkeypatch):
     wait(window.add_models(list(models), [2, 1]))
     window.settings.spins["layer_thickness"].setValue(0.25)
-    path = str(tmp_path / "job.slicerkit")
-    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path[:-10], ""))
+    path = str(tmp_path / "job.xeroform")
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path[:-len(".xeroform")], ""))
     assert window.save_project()  # adds the extension
     assert os.path.exists(path) and not window.isWindowModified()
-    assert window.windowTitle() == "job[*] — slicerkit"
+    assert window.windowTitle() == "job[*] — XeroForm" and window.title_label.text() == "job"
 
     window.new_project()
     assert window.parts.table.rowCount() == 0 and window.settings.config() == gui_defaults()
@@ -150,7 +151,7 @@ def test_project_save_and_open(window, models, tmp_path, monkeypatch):
 
 def test_open_project_with_missing_model(window, models, tmp_path):
     from slicerkit.project import Project, ProjectPart
-    path = str(tmp_path / "p.slicerkit")
+    path = str(tmp_path / "p.xeroform")
     Project([ProjectPart(models[0]), ProjectPart(str(tmp_path / "gone.stl"))]).save(path)
     wait(window.open_project(path))
     assert window.parts.jobs() == [models[0]] and window.isWindowModified()
@@ -215,13 +216,14 @@ def test_unexpected_error_shows_details(window, models, monkeypatch):
 
 def test_theme_switching(window):
     from slicerkit.gui import theme
-    window.set_theme("dark")
-    assert theme.mode() == "dark" and theme.current()["bg"] == theme.DARK["bg"]
-    assert QSettings().value("theme") == "dark"
-    window._cycle_theme()  # dark -> system
-    assert theme.mode() == "system"
+    assert theme.mode() == "dark"  # XeroForm is dark-first
     window.set_theme("light")
+    assert theme.current()["bg"] == theme.LIGHT["bg"] and QSettings().value("theme") == "light"
     assert QtWidgets.QApplication.instance().palette().window().color().name() == theme.LIGHT["bg"]
+    assert "#ffffff" not in theme.LIGHT.values()  # soft greys, never white
+    window._cycle_theme()  # light -> system
+    assert theme.mode() == "system"
+    window.set_theme("dark")
 
 
 def test_empty_states(window, models):
@@ -306,7 +308,17 @@ def test_theme_images_live_in_a_private_folder(app):
     path = theme._icon_file("check-mark", "#ffffff")
     folder = os.path.dirname(path)
     assert os.path.isfile(path) and folder == theme._private_dir()
-    assert os.path.basename(folder).startswith("slicerkit-theme-") and folder != "slicerkit-theme"
+    assert os.path.basename(folder).startswith("xeroform-theme-")
     if os.name == "posix":
         assert stat.S_IMODE(os.stat(folder).st_mode) == 0o700
         assert os.stat(folder).st_uid == os.getuid()
+
+
+def test_garbage_is_collected_on_the_gui_thread_only(window):
+    """The cycle collector must never free Qt objects on a worker thread (it crashes)."""
+    import gc
+    from slicerkit.gui.tasks import _MainThreadGC
+    app = QtWidgets.QApplication.instance()
+    assert not gc.isenabled() and len(app.findChildren(_MainThreadGC)) == 1
+    MainWindow().deleteLater()  # a second window doesn't install a second collector
+    assert len(app.findChildren(_MainThreadGC)) == 1

@@ -175,7 +175,7 @@ def test_cli_reports_model_and_repairs(tmp_path, capsys):
 
 def test_cli_mesh_error_exits_cleanly(tmp_path, capsys):
     assert main([str(tmp_path / "nope.stl"), "-o", str(tmp_path / "x.cli")]) == 1
-    assert "slicerkit: error: File not found" in capsys.readouterr().err
+    assert "xeroform: error: File not found" in capsys.readouterr().err
 
 
 def test_files_referenced_inside_a_model_are_never_opened(tmp_path, monkeypatch):

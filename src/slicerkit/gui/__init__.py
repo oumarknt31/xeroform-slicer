@@ -1,6 +1,6 @@
-"""Desktop GUI for slicerkit (PySide6). Install with:  pip install -e ".[gui]"
+"""XeroForm desktop app (PySide6). Install with:  pip install -e ".[gui]"
 
-Run:  slicerkit-gui [model.stl | project.slicerkit ...]   or   python -m slicerkit.gui
+Run:  xeroform-gui [model.stl | project.xeroform ...]   or   python -m slicerkit.gui
 """
 from __future__ import annotations
 import logging
@@ -17,7 +17,7 @@ def _setup_logging() -> str:
 
     folder = QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)
     os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, "slicerkit.log")
+    path = os.path.join(folder, "xeroform.log")
     handler = logging.FileHandler(path, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger("slicerkit")
@@ -30,18 +30,19 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .. import __version__
-    from ..project import EXTENSION
-    from .window import MainWindow
+    from ..project import EXTENSION, LEGACY_EXTENSIONS
+    from .window import APP_NAME, MainWindow
 
     argv = sys.argv if argv is None else argv
     app = QApplication.instance() or QApplication(argv)
-    app.setOrganizationName("slicerkit")
-    app.setApplicationName("slicerkit")
+    app.setOrganizationName(APP_NAME)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
     app.setApplicationVersion(__version__)
     from .theme import app_icon
     app.setWindowIcon(app_icon())
     log_path = _setup_logging()
-    log.info("slicerkit %s starting", __version__)
+    log.info("XeroForm %s starting", __version__)
 
     window = MainWindow(log_path=log_path)
 
@@ -55,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.excepthook = excepthook
     files = [os.path.abspath(a) for a in argv[1:]]
-    projects = [f for f in files if f.endswith(EXTENSION)]
+    projects = [f for f in files if f.endswith((EXTENSION, *LEGACY_EXTENSIONS))]
     if projects:
         window.open_project(projects[0])
     elif files:

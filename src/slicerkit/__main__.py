@@ -1,4 +1,4 @@
-"""Command-line entry point:  slicerkit input.stl [more.stl ...] -o output.cli"""
+"""XeroForm command line:  xeroform input.stl [more.stl ...] -o output.cli"""
 from __future__ import annotations
 import argparse
 import os
@@ -15,8 +15,8 @@ from .summary import summary_lines
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="slicerkit",
-        description="SLS slicer: turn an STL model into laser tool-paths (.cli).",
+        prog="xeroform",
+        description="XeroForm SLS slicer: turn 3D models into laser tool-paths (.cli).",
     )
     ap.add_argument("inputs", nargs="+", metavar="input",
                     help="model file(s) (.stl, .obj, .3mf, ...); several are packed into one build")
@@ -83,7 +83,7 @@ def main(argv=None) -> int:
         else:
             result = slice_job(args.inputs[0], args.output, cfg)
     except (MeshError, NestingError) as e:
-        print(f"slicerkit: error: {e}", file=sys.stderr)
+        print(f"xeroform: error: {e}", file=sys.stderr)
         return 1
     layers = result.layers
     print("\n".join(summary_lines(result, cfg, args.output)))

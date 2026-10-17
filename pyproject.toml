@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "slicerkit"
 version = "0.1.0"
-description = "Open-source SLS slicing engine (STL -> .cli laser tool-paths) for the XeroForm printer"
+description = "XeroForm Slicer: open-source SLS slicing (3D models -> laser tool-paths) for the XeroForm printer"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Oumar Kante" }]
@@ -22,10 +22,15 @@ dev = ["pytest>=7.0"]
 gui = ["PySide6-Essentials>=6.5"]
 
 [project.scripts]
-slicerkit = "slicerkit.__main__:main"
+xeroform = "slicerkit.__main__:main"
+slicerkit = "slicerkit.__main__:main"          # old name, kept working
 
 [project.gui-scripts]
-slicerkit-gui = "slicerkit.gui:main"
+xeroform-gui = "slicerkit.gui:main"
+slicerkit-gui = "slicerkit.gui:main"           # old name, kept working
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"slicerkit.gui" = ["assets/*.svg"]

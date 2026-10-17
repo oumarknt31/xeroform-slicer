@@ -43,8 +43,8 @@ def test_unknown_settings_are_ignored_missing_get_defaults():
 
 @pytest.mark.parametrize("content, match", [
     ("not json", "not a valid project"),
-    ('{"format": "something-else"}', "not a slicerkit project"),
-    ('{"format": "slicerkit-project", "version": 99}', "newer slicerkit"),
+    ('{"format": "something-else"}', "not a XeroForm project"),
+    ('{"format": "xeroform-project", "version": 99}', "newer XeroForm"),
     ('{"format": "slicerkit-project", "settings": {"layer_thickness": 0}}', "Invalid settings"),
     ('{"format": "slicerkit-project", "parts": [{"copies": 2}]}', "malformed parts"),
 ])
@@ -83,3 +83,14 @@ def test_local_paths_outside_the_folder_still_work(tmp_path):
     model = tmp_path / "models" / "part.stl"
     Project([ProjectPart(str(model))]).save(str(proj / "p.slicerkit"))
     assert Project.load(str(proj / "p.slicerkit")).parts[0].path == str(model)
+
+
+def test_old_slicerkit_projects_still_open(tmp_path):
+    (tmp_path / "part.stl").write_text("x")
+    old = tmp_path / "old.slicerkit"
+    old.write_text(json.dumps({"format": "slicerkit-project", "version": 1,
+                               "parts": [{"path": "part.stl", "copies": 2}], "settings": {}}))
+    assert Project.load(str(old)).parts == [ProjectPart(str(tmp_path / "part.stl"), 2)]
+    new = tmp_path / "new.xeroform"
+    Project.load(str(old)).save(str(new))
+    assert json.loads(new.read_text())["format"] == "xeroform-project"

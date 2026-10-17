@@ -1,9 +1,9 @@
-"""Main window: a header with the main actions, parts and settings on the left,
+"""XeroForm main window: a header with the main actions, parts and settings on the left,
 the viewer (layers, 3D stack, build layout) with headline numbers on the right.
 
 Models load and slices run on worker threads, so the window never freezes. A
 slice stays in memory until exported; changing a part or a setting afterwards
-marks it out of date and blocks exporting it. Projects (.slicerkit) save the
+marks it out of date and blocks exporting it. Projects (.xeroform) save the
 parts and every setting; the window remembers its layout, theme and settings.
 """
 from __future__ import annotations
@@ -24,22 +24,25 @@ from ..laser import estimate_scan_time, layer_scan_time
 from ..part import MeshError, prepare_mesh
 from ..pipeline import SliceResult, export, slice_build, slice_job
 from ..preview import write_preview
-from ..project import EXTENSION, Project, ProjectError, config_from_dict, config_to_dict
+from ..project import EXTENSION, LEGACY_EXTENSIONS, Project, ProjectError, config_from_dict, config_to_dict
 from ..summary import hms, summary_lines
 from . import theme
 from .panels import PartsPanel, SettingsPanel, gui_defaults
-from .tasks import Task
+from .tasks import Task, collect_garbage_on_gui_thread
 from .views import LayerView, LayoutView, StackView
-from .widgets import Card, EmptyState, Segmented, StatTile, Toast, chip, tool_button
+from .widgets import Card, EmptyState, Segmented, StatTile, Toast, chip, shadow, spaced, tool_button
 
 log = logging.getLogger("slicerkit.gui")
 
 MODEL_EXTENSIONS = (".stl", ".obj", ".ply", ".3mf", ".off", ".glb")
 MODEL_FILTER = "3D models (*.stl *.STL *.obj *.ply *.3mf *.3MF);;All files (*)"
-PROJECT_FILTER = f"slicerkit project (*{EXTENSION})"
+APP_NAME = "XeroForm"
+PROJECT_EXTENSIONS = (EXTENSION, *LEGACY_EXTENSIONS)
+PROJECT_FILTER = f"XeroForm project ({' '.join('*' + e for e in PROJECT_EXTENSIONS)})"
 MAX_RECENT = 8
 FLIPBOOK_FPS = 24
 THEME_ICONS = {"system": "auto", "light": "sun", "dark": "moon"}
+THEME_NAMES = {"system": "follow the system", "light": "light", "dark": "dark"}
 
 
 def _keep_space(widget) -> None:
@@ -52,6 +55,7 @@ def _keep_space(widget) -> None:
 class MainWindow(QMainWindow):
     def __init__(self, log_path: str | None = None):
         super().__init__()
+        collect_garbage_on_gui_thread()  # Qt objects must only ever be freed on this thread
         self.log_path = log_path
         self.store = QSettings()
         self.project_path: str | None = None
@@ -73,12 +77,15 @@ class MainWindow(QMainWindow):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(0)
         col.addWidget(self._build_header())
+        line = QFrame()
+        line.setObjectName("accentLine")
+        col.addWidget(line)
         self.split = QSplitter()
         self.split.setContentsMargins(12, 12, 12, 12)
         self.split.addWidget(self._build_sidebar())
         self.split.addWidget(self._build_main())
         self.split.setStretchFactor(1, 1)
-        self.split.setSizes([400, 1000])
+        self.split.setSizes([410, 990])
         body = QWidget()
         bl = QVBoxLayout(body)
         bl.setContentsMargins(12, 12, 12, 12)
@@ -105,21 +112,24 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("header")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(16, 10, 16, 10)
+        row.setContentsMargins(18, 10, 18, 10)
         row.setSpacing(6)
-        logo = QLabel()
-        logo.setPixmap(theme.app_icon().pixmap(30, 30))
-        row.addWidget(logo)
-        titles = QVBoxLayout()
-        titles.setSpacing(0)
-        self.title_label = QLabel("Untitled")
-        self.title_label.setObjectName("appTitle")
-        self.subtitle_label = QLabel("slicerkit")
-        self.subtitle_label.setObjectName("hint")
-        titles.addWidget(self.title_label)
-        titles.addWidget(self.subtitle_label)
-        row.addLayout(titles)
-        row.addSpacing(18)
+        self.logo = QLabel()
+        self.logo.setPixmap(theme.app_icon().pixmap(36, 36))
+        self.logo.setToolTip(APP_NAME)
+        row.addWidget(self.logo)
+        row.addSpacing(6)
+        brand = QVBoxLayout()
+        brand.setSpacing(0)
+        wordmark = QLabel(APP_NAME)
+        wordmark.setObjectName("wordmark")
+        sub_mark = QLabel("SLICER")
+        sub_mark.setObjectName("wordmarkSub")
+        spaced(sub_mark, 2.5)
+        brand.addWidget(wordmark)
+        brand.addWidget(sub_mark)
+        row.addLayout(brand)
+        row.addSpacing(22)
 
         self.open_button = tool_button("open", "Open", "Open a project (⌘O)")
         self.open_button.clicked.connect(lambda: self.open_project())
@@ -131,17 +141,38 @@ class MainWindow(QMainWindow):
             row.addWidget(b)
         row.addStretch()
 
-        self.theme_button = tool_button("auto", "", "Theme: follow the system")
+        # the project, as a pill in the middle
+        pill = QFrame()
+        pill.setObjectName("pill")
+        pl = QHBoxLayout(pill)
+        pl.setContentsMargins(14, 5, 14, 5)
+        pl.setSpacing(8)
+        self.dirty_dot = QLabel("●")
+        self.dirty_dot.setObjectName("dirtyDot")
+        self.dirty_dot.setToolTip("Unsaved changes")
+        self.title_label = QLabel("Untitled")
+        self.title_label.setObjectName("pillTitle")
+        self.subtitle_label = QLabel("not saved yet")
+        self.subtitle_label.setObjectName("hint")
+        pl.addWidget(self.dirty_dot)
+        pl.addWidget(self.title_label)
+        pl.addWidget(self.subtitle_label)
+        row.addWidget(pill)
+        row.addStretch()
+
+        self.theme_button = tool_button("moon", "", "Theme")
         self.theme_button.clicked.connect(self._cycle_theme)
         row.addWidget(self.theme_button)
+        row.addSpacing(4)
         self.export_button = QPushButton("Export")
         self.export_button.setToolTip("Write the laser paths for the machine (⌘E)")
         self.export_button.clicked.connect(self.export_cli)
         row.addWidget(self.export_button)
+        row.addSpacing(4)
         self.slice_button = QPushButton("Slice")
         self.slice_button.setObjectName("primary")
         self.slice_button.setToolTip("Slice all parts (⌘R)")
-        self.slice_button.setMinimumWidth(110)
+        self.slice_button.setMinimumWidth(120)
         self.slice_button.clicked.connect(self.start_slicing)
         row.addWidget(self.slice_button)
         return bar
@@ -163,7 +194,7 @@ class MainWindow(QMainWindow):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         side = QWidget()
-        side.setMinimumWidth(380)
+        side.setMinimumWidth(400)
         side.setMaximumWidth(560)
         outer = QVBoxLayout(side)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -264,6 +295,7 @@ class MainWindow(QMainWindow):
         self.top_z.setObjectName("hint")
         self.top_z.setAlignment(Qt.AlignHCenter)
         self.slider = QSlider(Qt.Vertical)
+        self.slider.setToolTip("Layer · ← → step · PgUp/PgDn ±10 · Home/End · Space plays the laser")
         self.slider.setEnabled(False)
         self.slider.valueChanged.connect(self._layer_changed)
         self.bottom_z = QLabel()
@@ -292,9 +324,6 @@ class MainWindow(QMainWindow):
         self.layer_info.setObjectName("muted")
         self.layer_info.setTextInteractionFlags(Qt.TextSelectableByMouse)
         bottom.addWidget(self.layer_info, 1)
-        hint = QLabel("← → layer · PgUp/PgDn ±10")
-        hint.setObjectName("hint")
-        bottom.addWidget(hint)
         vc.addLayout(bottom)
         col.addWidget(viewer, 1)
 
@@ -351,7 +380,7 @@ class MainWindow(QMainWindow):
         self.act_preview = action("Export &Preview (.html)…", self.export_preview)
         self.act_quit = action("&Quit", self.close, QKeySequence.Quit)
         self.act_fit = action("&Fit View", self._fit_views, QKeySequence("Ctrl+0"))
-        self.act_about = action("&About slicerkit", self.about)
+        self.act_about = action(f"&About {APP_NAME}", self.about)
         self.act_log = action("Show &Log File", self.show_log)
 
         bar = self.menuBar()
@@ -385,7 +414,7 @@ class MainWindow(QMainWindow):
     def _cycle_theme(self) -> None:
         modes = theme.MODES
         self.set_theme(modes[(modes.index(theme.mode()) + 1) % len(modes)])
-        self.toast(f"Theme: {theme.mode()}", THEME_ICONS[theme.mode()])
+        self.toast(f"Theme: {THEME_NAMES[theme.mode()]}", THEME_ICONS[theme.mode()])
 
     def _restyle(self) -> None:
         """Re-tint icons and redraw views after a theme change."""
@@ -395,7 +424,8 @@ class MainWindow(QMainWindow):
                   self.scan_button, self.flip_button):
             b.setIcon(theme.icon(b.property("iconName")))
         self.theme_button.setIcon(theme.icon(THEME_ICONS[theme.mode()]))
-        self.theme_button.setToolTip(f"Theme: {theme.mode()} (click to change)")
+        self.theme_button.setToolTip(f"Theme: {THEME_NAMES[theme.mode()]} (click to change)")
+        shadow(self.slice_button, theme.current()["accent"], blur=26, dy=2, alpha=150)
         self.banner_icon.setPixmap(theme.icon("warning", theme.current()["warn_text"]).pixmap(18, 18))
         self._scan_state(self.view.playing())
         for v in (self.view, self.stack_view, self.layout_view):
@@ -412,10 +442,12 @@ class MainWindow(QMainWindow):
     def _refresh(self) -> None:
         """Bring title, banner, empty state and enabled actions in line with the state."""
         name = os.path.splitext(os.path.basename(self.project_path))[0] if self.project_path else "Untitled"
-        self.setWindowTitle(f"{name}[*] — slicerkit")
+        self.setWindowTitle(f"{name}[*] — {APP_NAME}")
         self.setWindowModified(self.dirty)
-        self.title_label.setText(name + (" •" if self.dirty else ""))
-        self.subtitle_label.setText(self.project_path or "Not saved yet")
+        self.title_label.setText(name)
+        self.subtitle_label.setText(os.path.dirname(self.project_path) if self.project_path else "not saved yet")
+        self.subtitle_label.setToolTip(self.project_path or "")
+        self.dirty_dot.setVisible(self.dirty)
         busy, slicing = self.busy(), self.slicing is not None and self.slicing.isRunning()
         exportable = self.result is not None and not self.stale and not busy
         self.slice_button.setEnabled(not busy)
@@ -820,7 +852,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save project", start, PROJECT_FILTER)
         if not path:
             return False
-        if not path.endswith(EXTENSION):
+        if not path.endswith(PROJECT_EXTENSIONS):
             path += EXTENSION
         return self._write_project(path)
 
@@ -870,7 +902,7 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geometry)
         if (split := self.store.value("splitter")) is not None:
             self.split.restoreState(split)
-        theme.apply(QApplication.instance(), self.store.value("theme", "system"))
+        theme.apply(QApplication.instance(), self.store.value("theme", theme.DEFAULT_MODE))
         self._restyle()
         try:
             saved = self.store.value("last_settings")
@@ -898,12 +930,12 @@ class MainWindow(QMainWindow):
 
     def dragEnterEvent(self, event):
         files = self._dropped_files(event)
-        if any(f.lower().endswith(MODEL_EXTENSIONS + (EXTENSION,)) for f in files) and not self.busy():
+        if any(f.lower().endswith(MODEL_EXTENSIONS + PROJECT_EXTENSIONS) for f in files) and not self.busy():
             event.acceptProposedAction()
 
     def dropEvent(self, event):
         files = self._dropped_files(event)
-        projects = [f for f in files if f.lower().endswith(EXTENSION)]
+        projects = [f for f in files if f.lower().endswith(PROJECT_EXTENSIONS)]
         models = [f for f in files if f.lower().endswith(MODEL_EXTENSIONS)]
         event.acceptProposedAction()
         if projects:
@@ -916,9 +948,9 @@ class MainWindow(QMainWindow):
 
     def about(self) -> None:
         QMessageBox.about(
-            self, "About slicerkit",
-            f"<h3>slicerkit {__version__}</h3>"
-            "<p>Open-source SLS slicer for the XeroForm printer: 3D models in, "
+            self, f"About {APP_NAME}",
+            f"<h3>{APP_NAME} Slicer {__version__}</h3>"
+            "<p>The open-source SLS slicer for the XeroForm printer: 3D models in, "
             "laser tool-paths out.</p>"
             f"<p>Built on PySLM, trimesh and Qt {qVersion()}.</p>")
 

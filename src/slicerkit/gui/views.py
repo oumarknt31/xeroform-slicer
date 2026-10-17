@@ -46,6 +46,16 @@ def _mix(a: str, b: str, t: float) -> QColor:
                   round(ca.blue() + (cb.blue() - ca.blue()) * t))
 
 
+def paint_canvas(p: QPainter, widget: QWidget) -> None:
+    """The viewer background: graphite with a soft light in the middle (a vignette)."""
+    t = theme.current()
+    r = widget.rect()
+    glow = QRadialGradient(r.center(), max(r.width(), r.height()) * 0.75)
+    glow.setColorAt(0, QColor(t["canvas_hi"]))
+    glow.setColorAt(1, QColor(t["canvas"]))
+    p.fillRect(r, glow)
+
+
 def _overlay_text(p: QPainter, widget: QWidget, text: str, corner: str) -> None:
     """Small muted text in a corner of the widget (screen space)."""
     p.resetTransform()
@@ -151,10 +161,10 @@ class PlateView(QWidget):
 
     def paint_background(self, p: QPainter) -> None:
         t = theme.current()
-        p.fillRect(self.rect(), QColor(t["canvas"]))
+        paint_canvas(p, self)
         p.setTransform(self.transform())
         if self.plate:
-            p.setPen(_pen(t["border"], 1))
+            p.setPen(_pen(t["border_hi"], 1))
             p.setBrush(QColor(t["plate"]))
             p.drawRect(self._bounds)
             p.setBrush(Qt.NoBrush)
@@ -305,11 +315,15 @@ class LayerView(PlateView):
                     p.setPen(_pen(QColor.fromHslF((50 + 230 * i / n) / 360, 0.85, 0.52)))
                     p.drawLine(line)
             else:
-                p.setPen(_pen(t["hatch"]))
+                p.setPen(_pen(_alpha(t["hatch"], 200)))
                 p.drawLines(shown_h)
         if self.show_contours:
+            for width, a in ((7, 40), (3.5, 70)):  # soft glow under the line
+                for poly, hole in shown_c:
+                    p.setPen(_pen(_alpha(t["hole"] if hole else t["accent"], a), width))
+                    p.drawPolygon(poly)
             for poly, hole in shown_c:
-                p.setPen(_pen(t["hole"] if hole else t["accent"], 1.6))
+                p.setPen(_pen(t["hole"] if hole else t["accent_glow"], 1.4))
                 p.drawPolygon(poly)
 
         if self._reveal is not None and k:  # the laser spot, glowing
@@ -498,7 +512,7 @@ class StackView(QWidget):
         t = theme.current()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.fillRect(self.rect(), QColor(t["canvas"]))
+        paint_canvas(p, self)
         if not self.layers:
             return
         project = self._projector()
@@ -507,7 +521,7 @@ class StackView(QWidget):
         lo = self._center[:2] - self._radius * 0.75
         hi = self._center[:2] + self._radius * 0.75
         plate = np.array([[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]])
-        p.setPen(_pen(t["border"], 1))
+        p.setPen(_pen(t["border_hi"], 1))
         p.setBrush(_alpha(t["plate"], 255))
         p.drawPolygon(project(plate, 0.0))
         p.setBrush(Qt.NoBrush)
@@ -515,7 +529,7 @@ class StackView(QWidget):
         n = len(self.layers)
         budget = self.MAX_POINTS_DRAGGING if self._drag is not None else self.MAX_POINTS
         step = max(1, math.ceil(self._points / budget))
-        low, high = t["muted"], t["accent"]
+        low, high = t["faint"], t["accent"]
         for i in range(0, n, step):
             if i == self.index:
                 continue
@@ -537,8 +551,12 @@ class StackView(QWidget):
         for pts in contours:
             cut.addPolygon(project(pts, z))
             cut.closeSubpath()
-        p.setPen(_pen(t["accent"], 2))
-        p.setBrush(_alpha(t["accent"], 60))
+        p.setBrush(Qt.NoBrush)
+        for width, a in ((8, 35), (4, 70)):  # glow
+            p.setPen(_pen(_alpha(t["accent"], a), width))
+            p.drawPath(cut)
+        p.setPen(_pen(t["accent_glow"], 1.6))
+        p.setBrush(_alpha(t["accent"], 70))
         p.drawPath(cut)
         _overlay_text(p, self, f"z {z:.2f} mm", "bottom-right")
         _overlay_text(p, self, "drag to orbit · scroll to zoom · double-click to reset", "bottom-left")

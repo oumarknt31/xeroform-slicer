@@ -69,7 +69,7 @@ def _time_or_none(layer: Layer, jump_speed: float | None) -> float | None:
         return None
 
 
-def write_preview(layers: list[Layer], path: str, title: str = "slicerkit preview",
+def write_preview(layers: list[Layer], path: str, title: str = "XeroForm preview",
                   every: int = 1, jump_speed: float | None = None) -> None:
     """Write an interactive HTML preview of `layers` to `path`.
 

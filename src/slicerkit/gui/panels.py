@@ -242,7 +242,7 @@ class SettingsPanel(QWidget):
                 self.allow_rotation.setToolTip("Let the packer turn parts about Z. Parts are never tipped over.")
                 self.allow_rotation.toggled.connect(self.changed)
                 form.addRow(self.allow_rotation)
-                self.use_volume = QCheckBox("Build volume")
+                self.use_volume = QCheckBox("Build volume (mm)")
                 self.use_volume.setToolTip("Printable size of the machine. Needed to pack several parts; "
                                            "150 mm is a placeholder until the machine is specified.")
                 self.use_volume.toggled.connect(self._volume_toggled)
@@ -252,8 +252,7 @@ class SettingsPanel(QWidget):
                     spin = QDoubleSpinBox()
                     spin.setRange(1, 5000)
                     spin.setDecimals(0)
-                    spin.setPrefix(f"{axis} ")
-                    spin.setSuffix(" mm")
+                    spin.setPrefix(f"{axis}  ")
                     spin.setKeyboardTracking(False)
                     spin.valueChanged.connect(self.changed)
                     self.volume.append(spin)
