@@ -81,7 +81,7 @@ def write_preview(layers: list[Layer], path: str, title: str = "XeroForm preview
     page = (_TEMPLATE
             .replace("__TITLE__", html.escape(title))
             .replace("__DATA__", data.replace("</", "<\\/")))
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(page)
 
 

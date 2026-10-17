@@ -50,7 +50,7 @@ def test_cli_direction_flags(ring_stl, tmp_path):
     out = tmp_path / "ring.cli"
     layers = slice_file(ring_stl, str(out), SliceConfig(layer_thickness=2.0, hatch_distance=1.0))
     flags = [line.split("/")[1].split(",")[1]
-             for line in out.read_text().splitlines() if line.startswith("$$POLYLINE/")]
+             for line in out.read_text(encoding="utf-8").splitlines() if line.startswith("$$POLYLINE/")]
     expected = ["0" if c.is_hole else "1" for layer in layers for c in layer.contours]
     assert flags == expected
     assert "0" in flags and "1" in flags

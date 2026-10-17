@@ -26,7 +26,9 @@ class AsciiCliExporter(Exporter):
     def write(self, layers, path: str, bounding_box) -> None:
         n = self._n
         bb = bounding_box
-        with open(path, "w") as f:
+        # ASCII with \n line endings on every OS, so a slice exported on Windows is
+        # byte-for-byte the same as one exported on macOS or Linux
+        with open(path, "w", encoding="ascii", newline="\n") as f:
             f.write("$$HEADERSTART\n$$ASCII\n")
             f.write(f"$$UNITS/{self.units:.6f}\n$$VERSION/200\n$$LABEL/1,part\n")
             f.write(

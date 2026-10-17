@@ -22,7 +22,7 @@ def test_slice_without_writing_then_export(cube, tmp_path):
     later, direct = tmp_path / "later.cli", tmp_path / "direct.cli"
     export(result, str(later), cfg)
     slice_job(cube, str(direct), cfg)
-    assert later.read_text() == direct.read_text()
+    assert later.read_text(encoding="utf-8") == direct.read_text(encoding="utf-8")
 
 
 def test_progress_reports_every_layer(cube):

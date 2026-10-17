@@ -17,7 +17,7 @@ def test_round_trip_with_relative_paths(tmp_path):
     path = tmp_path / "job.slicerkit"
     Project([ProjectPart(str(cube), 4)], cfg).save(str(path))
 
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert data["parts"] == [{"path": os.path.join("models", "cube.stl"), "copies": 4}]
 
     loaded = Project.load(str(path))
@@ -93,4 +93,4 @@ def test_old_slicerkit_projects_still_open(tmp_path):
     assert Project.load(str(old)).parts == [ProjectPart(str(tmp_path / "part.stl"), 2)]
     new = tmp_path / "new.xeroform"
     Project.load(str(old)).save(str(new))
-    assert json.loads(new.read_text())["format"] == "xeroform-project"
+    assert json.loads(new.read_text(encoding="utf-8"))["format"] == "xeroform-project"

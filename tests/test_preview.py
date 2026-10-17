@@ -28,7 +28,7 @@ def _embedded(html_text):
 def test_preview_matches_layers(ring_layers, tmp_path):
     out = tmp_path / "p.html"
     write_preview(ring_layers, str(out), title="ring <test>")
-    text = out.read_text()
+    text = out.read_text(encoding="utf-8")
     assert "<title>ring &lt;test&gt;</title>" in text
     data = _embedded(text)
 
@@ -78,5 +78,5 @@ def test_cli_writes_preview(tmp_path):
     trimesh.creation.box(extents=[10, 10, 10]).export(str(stl))
     out, html = tmp_path / "cube.cli", tmp_path / "cube.html"
     assert main([str(stl), "-o", str(out), "--layer", "1", "--preview", str(html), "--preview-every", "2"]) == 0
-    data = _embedded(html.read_text())
+    data = _embedded(html.read_text(encoding="utf-8"))
     assert data["total_layers"] == 9 and len(data["layers"]) == 5

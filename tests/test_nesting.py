@@ -138,7 +138,7 @@ def test_stacked_build_keeps_empty_layers(tmp_path):
     empty = [l.z for l in result.layers if not l.contours]
     # cubes span z 0-20 and 23-43; slices strictly inside the gap are powder only
     assert {21.0, 22.0} <= set(empty) and all(20 <= z <= 23 for z in empty)
-    text = (tmp_path / "b.cli").read_text()
+    text = (tmp_path / "b.cli").read_text(encoding="utf-8")
     assert text.count("$$LAYER/") == 42
 
 

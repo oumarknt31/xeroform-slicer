@@ -118,7 +118,7 @@ def test_slice_view_layout_and_export(window, models, tmp_path, monkeypatch):
     monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (str(out), ""))
     assert window.act_export.isEnabled()
     window.export_cli()
-    assert out.read_text().count("$$LAYER/") == 19
+    assert out.read_text(encoding="utf-8").count("$$LAYER/") == 19
 
 
 def test_changes_after_slicing_make_it_stale(window, models):
@@ -307,7 +307,7 @@ def test_theme_images_live_in_a_private_folder(app):
     from slicerkit.gui import theme
     path = theme._icon_file("check-mark", "#ffffff")
     folder = os.path.dirname(path)
-    assert os.path.isfile(path) and folder == theme._private_dir()
+    assert os.path.isfile(path) and os.path.normpath(folder) == os.path.normpath(theme._private_dir())
     assert os.path.basename(folder).startswith("xeroform-theme-")
     if os.name == "posix":
         assert stat.S_IMODE(os.stat(folder).st_mode) == 0o700
