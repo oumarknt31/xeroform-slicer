@@ -84,7 +84,7 @@ def prepare_mesh(path: str, scale: float = 1.0) -> tuple[trimesh.Trimesh, MeshRe
         mesh.apply_scale(scale)
     place_on_platform(mesh)
     report = describe(mesh)
-    report.repairs, report.warnings = repairs, unit_warnings(mesh)
+    report.repairs, report.warnings = repairs, shell_warnings(mesh) + unit_warnings(mesh)
     return mesh, report
 
 
@@ -93,7 +93,7 @@ def describe(mesh: trimesh.Trimesh) -> MeshReport:
         triangles=len(mesh.faces),
         bodies=int(mesh.body_count),
         size=tuple(float(e) for e in mesh.extents),
-        volume=float(mesh.volume),
+        volume=float(abs(mesh.volume)),
     )
 
 
@@ -111,22 +111,32 @@ def load_mesh(path: str) -> trimesh.Trimesh:
 
 
 def repair_mesh(mesh: trimesh.Trimesh) -> list[str]:
-    """Fix common mesh problems in place. Returns what was fixed."""
+    """Fix common mesh problems in place. Returns what was fixed.
+
+    A surface can be sliced when it is closed: every edge is used by an even
+    number of triangles. Two triangles per edge is the clean case; four, six...
+    happen where shells touch or overlap, and slice fine. An edge used an odd
+    number of times is a gap - the slice outline can't close there.
+    """
     repairs = []
     mesh.merge_vertices()
-    n = len(mesh.faces)
-    mesh.update_faces(mesh.nondegenerate_faces())
-    mesh.update_faces(mesh.unique_faces())
-    mesh.remove_unreferenced_vertices()
-    if n != len(mesh.faces):
-        repairs.append(f"removed {n - len(mesh.faces)} zero-area or duplicate triangles")
-    if len(mesh.faces) == 0:
-        raise MeshError("The model has no usable triangles after cleanup.")
 
-    if not mesh.is_watertight:
-        open_edges = _count_open_edges(mesh)
+    # Zero-area and duplicate triangles are usually junk, but in some files they
+    # are what closes the surface (3DBenchy has 563): only drop them if that
+    # doesn't open a gap.
+    keep = mesh.nondegenerate_faces() & mesh.unique_faces()
+    if not keep.all():
+        cleaned = mesh.copy()
+        cleaned.update_faces(keep)
+        if len(cleaned.faces) and _count_open_edges(cleaned) <= _count_open_edges(mesh):
+            mesh.update_faces(keep)
+            mesh.remove_unreferenced_vertices()
+            repairs.append(f"removed {int((~keep).sum())} zero-area or duplicate triangles")
+
+    open_edges = _count_open_edges(mesh)
+    if open_edges:
         trimesh.repair.fill_holes(mesh)
-        if not mesh.is_watertight:
+        if _count_open_edges(mesh):
             raise MeshError(
                 f"The model's surface has gaps ({open_edges} open edges) that couldn't be "
                 "closed automatically, so its inside can't be worked out. Repair it in a mesh "
@@ -135,12 +145,23 @@ def repair_mesh(mesh: trimesh.Trimesh) -> list[str]:
             )
         repairs.append(f"closed small holes in the surface ({open_edges} open edges)")
 
-    if not mesh.is_winding_consistent or mesh.volume < 0:
+    # Triangle orientation only matters for volume and normals, not for slicing;
+    # it can only be fixed reliably on a clean (manifold) surface.
+    if mesh.is_watertight and (not mesh.is_winding_consistent or mesh.volume < 0):
         trimesh.repair.fix_normals(mesh, multibody=True)
         repairs.append("fixed inside-out or inconsistently oriented triangles")
-    if not mesh.volume > 0:
+    if not abs(mesh.volume) > 0:
         raise MeshError("The model encloses no volume - it may be a flat surface, not a solid.")
     return repairs
+
+
+def shell_warnings(mesh: trimesh.Trimesh) -> list[str]:
+    """Warn when shells touch or overlap (edges shared by more than two triangles)."""
+    shared = int(np.count_nonzero(_edge_use_counts(mesh) > 2))
+    if not shared:
+        return []
+    return [f"{shared} edges are shared by more than two triangles, where parts of the model "
+            "touch or overlap. It is sliced as one solid - check the preview."]
 
 
 def place_on_platform(mesh: trimesh.Trimesh) -> None:
@@ -175,6 +196,11 @@ def check_fits(mesh: trimesh.Trimesh,
         )
 
 
+def _edge_use_counts(mesh: trimesh.Trimesh) -> np.ndarray:
+    """How many triangles use each distinct edge."""
+    return np.unique(mesh.edges_sorted, axis=0, return_counts=True)[1]
+
+
 def _count_open_edges(mesh: trimesh.Trimesh) -> int:
-    """Edges used by only one triangle - each one is part of a gap in the surface."""
-    return len(trimesh.grouping.group_rows(mesh.edges_sorted, require_count=1))
+    """Edges used by an odd number of triangles - each one is part of a gap in the surface."""
+    return int(np.count_nonzero(_edge_use_counts(mesh) % 2))

@@ -59,6 +59,35 @@ def test_big_hole_is_refused(tmp_path):
         Part(_save(tmp_path, mesh))
 
 
+def test_sliver_triangle_that_closes_the_surface_is_kept(tmp_path):
+    """A zero-area triangle can be what closes a surface (3DBenchy has 563 of them).
+
+    10 mm cube whose front face has an extra vertex M in the middle of its top
+    edge; a zero-area sliver (A, M, B) closes the seam against the top face.
+    """
+    v = [(0, 0, 10), (10, 0, 10), (10, 10, 10), (0, 10, 10),   # A B C D (top)
+         (0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0),       # E F G H (bottom)
+         (5, 0, 10)]                                           # M, on edge AB
+    f = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6),           # top, bottom
+         (4, 5, 8), (5, 1, 8), (4, 8, 0),                      # front, split at M
+         (6, 7, 3), (6, 3, 2), (7, 4, 0), (7, 0, 3), (5, 6, 2), (5, 2, 1),
+         (0, 8, 1)]                                            # the zero-area sliver
+    mesh = trimesh.Trimesh(vertices=v, faces=f, process=False)
+    part = Part(_save(tmp_path, mesh))
+    assert part.report.volume == pytest.approx(1000)
+    assert not any("removed" in r for r in part.report.repairs)
+
+
+def test_touching_shells_are_sliced_with_a_warning(tmp_path):
+    """Two boxes sharing one edge: that edge is used by four triangles, which is fine."""
+    mesh = trimesh.util.concatenate([_box((10, 10, 10), (5, 5, 5)), _box((10, 10, 10), (15, 15, 5))])
+    part = Part(_save(tmp_path, mesh))
+    assert part.report.volume == pytest.approx(2000)
+    assert any("shared by more than two triangles" in w for w in part.report.warnings)
+    layers = slice_part(part, HatchSettings(hatch_distance=1), 1)
+    assert len(layers) == 9 and all(sum(not c.is_hole for c in l.contours) >= 2 for l in layers)
+
+
 def test_inside_out_is_fixed(tmp_path):
     mesh = _box()
     mesh.invert()
