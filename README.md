@@ -38,7 +38,15 @@ Command line:
 ```bash
 slicerkit model.stl -o model.cli --layer 0.1 --hatch-distance 0.2 --hatch-rotation 67
 # or:  python -m slicerkit model.stl -o model.cli
+
+# also write an interactive layer preview (open it in any browser):
+slicerkit model.stl -o model.cli --preview model.html
 ```
+
+The preview steps through layers (slider or ← →) and shows outlines (holes in
+blue), hatch fill, laser-off travel moves and scan order, plus per-layer
+laser-on / travel length. Use `--preview-every N` to keep the file small for big
+parts.
 
 From Python:
 
@@ -48,6 +56,9 @@ from slicerkit import slice_file, SliceConfig
 layers = slice_file("model.stl", "model.cli",
                     SliceConfig(layer_thickness=0.1, hatch_distance=0.2))
 print(len(layers), "layers")
+
+from slicerkit import write_preview
+write_preview(layers, "model.html")
 ```
 
 ## Layout
@@ -63,6 +74,7 @@ src/slicerkit/
     base.py      # Exporter interface
     cli_ascii.py # ASCII .cli writer
   pipeline.py    # orchestrates the stages
+  preview.py     # interactive HTML layer viewer
   __main__.py    # CLI entry point
 tests/           # round-trip export, slicing correctness
 examples/        # sample_cube.py
@@ -74,6 +86,7 @@ examples/        # sample_cube.py
 - [x] ASCII `.cli` export, verified with a lossless round-trip test
 - [x] contours follow the CLI orientation convention (outer CCW / flag 1, holes CW / flag 0)
 - [x] hatch angle rotates per layer (`hatch_angle_increment`, default 67°; 0 = fixed)
+- [x] interactive HTML layer preview (`--preview`)
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [ ] 3D part nesting; PySide/Qt GUI on top of the engine

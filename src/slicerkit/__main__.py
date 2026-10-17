@@ -1,9 +1,11 @@
 """Command-line entry point:  slicerkit input.stl -o output.cli"""
 from __future__ import annotations
 import argparse
+import os
 
 from .pipeline import slice_file
 from .config import SliceConfig
+from .preview import write_preview
 
 
 def main(argv=None) -> int:
@@ -19,7 +21,12 @@ def main(argv=None) -> int:
     ap.add_argument("--hatch-rotation", type=float, default=67.0,
                     help="hatch angle added per layer in deg (0 = fixed)")
     ap.add_argument("--units", type=float, default=1.0, help="mm per .cli coordinate unit")
+    ap.add_argument("--preview", metavar="HTML", help="also write an interactive layer preview (.html)")
+    ap.add_argument("--preview-every", type=int, default=1, metavar="N",
+                    help="keep every N-th layer in the preview (smaller file for big parts)")
     args = ap.parse_args(argv)
+    if args.preview_every < 1:
+        ap.error("--preview-every must be >= 1")
 
     try:
         cfg = SliceConfig(
@@ -34,6 +41,10 @@ def main(argv=None) -> int:
     layers = slice_file(args.input, args.output, cfg)
     vectors = sum(l.num_hatch_vectors for l in layers)
     print(f"Sliced {len(layers)} layers ({vectors} hatch vectors) -> {args.output}")
+    if args.preview:
+        write_preview(layers, args.preview, title=os.path.basename(args.input),
+                      every=args.preview_every)
+        print(f"Preview -> {args.preview}")
     return 0
 
 
