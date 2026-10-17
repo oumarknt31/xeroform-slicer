@@ -34,8 +34,10 @@ class AsciiCliExporter(Exporter):
             for layer in layers:
                 f.write(f"$$LAYER/{n(layer.z)}\n")
                 for c in layer.contours:
+                    # direction flag per CLI spec: 0 = clockwise (hole), 1 = counter-clockwise (outer)
+                    direction = 0 if c.is_hole else 1
                     pts = ",".join(f"{n(x)},{n(y)}" for x, y in c.points)
-                    f.write(f"$$POLYLINE/1,1,{len(c.points)},{pts}\n")
+                    f.write(f"$$POLYLINE/1,{direction},{len(c.points)},{pts}\n")
                 for h in layer.hatches:
                     flat = np.asarray(h.segments).reshape(-1, 2)
                     vals = ",".join(f"{n(x)},{n(y)}" for x, y in flat)

@@ -14,9 +14,10 @@ EXPORTERS = {
 
 def get_exporter(name: str, **kwargs) -> Exporter:
     try:
-        return EXPORTERS[name](**kwargs)
+        cls = EXPORTERS[name]
     except KeyError:
-        raise ValueError(f"Unknown export format {name!r}. Available: {list(EXPORTERS)}")
+        raise ValueError(f"Unknown export format {name!r}. Available: {list(EXPORTERS)}") from None
+    return cls(**kwargs)
 
 
 __all__ = ["Exporter", "AsciiCliExporter", "EXPORTERS", "get_exporter"]

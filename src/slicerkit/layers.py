@@ -5,16 +5,30 @@ translate them into these plain, well-named structures exactly once (in
 `slicing.py`). Everything downstream - the exporters, the tests - only ever sees
 these classes, never PySLM. If PySLM is ever swapped out, only the translation
 changes; this model and the exporters do not.
+
+Orientation convention (same as the CLI spec): outer outlines run
+counter-clockwise, holes run clockwise.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
 
 
+def signed_area(points: np.ndarray) -> float:
+    """Shoelace area of a closed (N, 2) polyline: > 0 counter-clockwise, < 0 clockwise."""
+    x, y = points[:, 0], points[:, 1]
+    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
+
+
 @dataclass
 class Contour:
     """A closed outline of a layer. `points` is an (N, 2) array of (x, y)."""
     points: np.ndarray
+
+    @property
+    def is_hole(self) -> bool:
+        """True for a hole (clockwise), False for an outer outline (counter-clockwise)."""
+        return signed_area(self.points) < 0
 
 
 @dataclass

@@ -36,7 +36,7 @@ automatically as a dependency).
 Command line:
 
 ```bash
-slicerkit model.stl -o model.cli --layer 0.1 --hatch-distance 0.2
+slicerkit model.stl -o model.cli --layer 0.1 --hatch-distance 0.2 --hatch-rotation 67
 # or:  python -m slicerkit model.stl -o model.cli
 ```
 
@@ -64,7 +64,7 @@ src/slicerkit/
     cli_ascii.py # ASCII .cli writer
   pipeline.py    # orchestrates the stages
   __main__.py    # CLI entry point
-tests/           # round-trip export test
+tests/           # round-trip export, slicing correctness
 examples/        # sample_cube.py
 ```
 
@@ -72,10 +72,16 @@ examples/        # sample_cube.py
 
 - [x] load -> slice -> hatch -> export pipeline working end to end
 - [x] ASCII `.cli` export, verified with a lossless round-trip test
+- [x] contours follow the CLI orientation convention (outer CCW / flag 1, holes CW / flag 0)
+- [x] hatch angle rotates per layer (`hatch_angle_increment`, default 67°; 0 = fixed)
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [ ] 3D part nesting; PySide/Qt GUI on top of the engine
 
-> The ASCII `.cli` output is structurally valid and self-consistent. The `units`,
-> header keywords, and POLYLINE direction flag still need to be matched to the
-> firmware — all of that lives in `export/cli_ascii.py`.
+> The ASCII `.cli` output is structurally valid and self-consistent, and the
+> POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and
+> how the firmware uses the direction flag still need to be confirmed — all of
+> that lives in `export/cli_ascii.py`.
+>
+> `trimesh` is capped below 6: PySLM 0.6 calls `Path.to_planar`, which trimesh has
+> deprecated (it emits a DeprecationWarning on every slice).
