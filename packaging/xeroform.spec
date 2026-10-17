@@ -19,7 +19,9 @@ hidden = (
     + collect_submodules("pyclipr")
 )
 datas = (
-    [(os.path.join(ROOT, "src", "slicerkit", "gui", "assets", "*.svg"), os.path.join("slicerkit", "gui", "assets"))]
+    [(os.path.join(ROOT, "src", "slicerkit", "gui", "assets", "*.svg"), os.path.join("slicerkit", "gui", "assets")),
+     (os.path.join(ROOT, "LICENSE"), "."),
+     (os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"), ".")]
     + collect_data_files("trimesh")
 )
 excludes = ["matplotlib", "tkinter", "IPython", "pandas", "pytest", "vtk", "PySide6.QtQml", "PySide6.QtQuick",

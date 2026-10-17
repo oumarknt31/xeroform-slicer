@@ -7,52 +7,36 @@ marks it out of date and blocks exporting it. Projects (.xeroform) save the
 parts and every setting; the window remembers its layout, theme and settings.
 """
 from __future__ import annotations
-import json
 import logging
 import os
 
-from PySide6.QtCore import QRectF, QSettings, Qt, QTimer, QUrl, qVersion
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtCore import QRectF, QSettings, QTimer, QUrl, qVersion
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QApplication, QFileDialog, QFrame, QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget,
 )
 
 from .. import __version__
 from ..laser import estimate_scan_time, layer_scan_time
 from ..part import MeshError, prepare_mesh
-from ..pipeline import SliceResult, export, slice_build, slice_job
-from ..preview import write_preview
-from ..project import EXTENSION, LEGACY_EXTENSIONS, Project, ProjectError, config_from_dict, config_to_dict
+from ..pipeline import SliceResult, slice_build, slice_job
 from ..summary import hms, summary_lines
 from . import theme
-from .panels import PartsPanel, SettingsPanel, gui_defaults
+from .constants import APP_NAME, FLIPBOOK_FPS, MODEL_FILTER, REPO_URL, THEME_ICONS, THEME_NAMES
+from .playback import PlaybackMixin
+from .projects import ProjectsMixin
 from .tasks import Task, collect_garbage_on_gui_thread
-from .views import LayerView, LayoutView, StackView
-from .widgets import Card, EmptyState, Segmented, StatTile, Toast, chip, shadow, spaced, tool_button
+from .widgets import Toast, shadow
+from .window_ui import WindowLayoutMixin
 
 log = logging.getLogger("slicerkit.gui")
 
-MODEL_EXTENSIONS = (".stl", ".obj", ".ply", ".3mf", ".off", ".glb")
-MODEL_FILTER = "3D models (*.stl *.STL *.obj *.ply *.3mf *.3MF);;All files (*)"
-APP_NAME = "XeroForm"
-PROJECT_EXTENSIONS = (EXTENSION, *LEGACY_EXTENSIONS)
-PROJECT_FILTER = f"XeroForm project ({' '.join('*' + e for e in PROJECT_EXTENSIONS)})"
-MAX_RECENT = 8
-FLIPBOOK_FPS = 24
-THEME_ICONS = {"system": "auto", "light": "sun", "dark": "moon"}
-THEME_NAMES = {"system": "follow the system", "light": "light", "dark": "dark"}
+__all__ = ["APP_NAME", "MainWindow"]
 
 
-def _keep_space(widget) -> None:
-    """Keep a widget's space when it is hidden, so the layout doesn't jump."""
-    policy = widget.sizePolicy()
-    policy.setRetainSizeWhenHidden(True)
-    widget.setSizePolicy(policy)
+class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
+    """The XeroForm window. Layout, projects and playback live in the mixins."""
 
-
-class MainWindow(QMainWindow):
     def __init__(self, log_path: str | None = None):
         super().__init__()
         collect_garbage_on_gui_thread()  # Qt objects must only ever be freed on this thread
@@ -106,304 +90,6 @@ class MainWindow(QMainWindow):
         self.dirty = False
         self._refresh()
 
-    # ===================================================================== layout
-
-    def _build_header(self) -> QWidget:
-        bar = QFrame()
-        bar.setObjectName("header")
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(18, 10, 18, 10)
-        row.setSpacing(6)
-        self.logo = QLabel()
-        self.logo.setPixmap(theme.app_icon().pixmap(36, 36))
-        self.logo.setToolTip(APP_NAME)
-        row.addWidget(self.logo)
-        row.addSpacing(6)
-        brand = QVBoxLayout()
-        brand.setSpacing(0)
-        wordmark = QLabel(APP_NAME)
-        wordmark.setObjectName("wordmark")
-        sub_mark = QLabel("SLICER")
-        sub_mark.setObjectName("wordmarkSub")
-        spaced(sub_mark, 2.5)
-        brand.addWidget(wordmark)
-        brand.addWidget(sub_mark)
-        row.addLayout(brand)
-        row.addSpacing(22)
-
-        self.open_button = tool_button("open", "Open", "Open a project (⌘O)")
-        self.open_button.clicked.connect(lambda: self.open_project())
-        self.save_button = tool_button("save", "Save", "Save the project (⌘S)")
-        self.save_button.clicked.connect(self.save_project)
-        self.header_add = tool_button("add", "Add models", "Add models (⌘I)")
-        self.header_add.clicked.connect(self.add_models_dialog)
-        for b in (self.open_button, self.save_button, self.header_add):
-            row.addWidget(b)
-        row.addStretch()
-
-        # the project, as a pill in the middle
-        pill = QFrame()
-        pill.setObjectName("pill")
-        pl = QHBoxLayout(pill)
-        pl.setContentsMargins(14, 5, 14, 5)
-        pl.setSpacing(8)
-        self.dirty_dot = QLabel("●")
-        self.dirty_dot.setObjectName("dirtyDot")
-        self.dirty_dot.setToolTip("Unsaved changes")
-        self.title_label = QLabel("Untitled")
-        self.title_label.setObjectName("pillTitle")
-        self.subtitle_label = QLabel("not saved yet")
-        self.subtitle_label.setObjectName("hint")
-        pl.addWidget(self.dirty_dot)
-        pl.addWidget(self.title_label)
-        pl.addWidget(self.subtitle_label)
-        row.addWidget(pill)
-        row.addStretch()
-
-        self.theme_button = tool_button("moon", "", "Theme")
-        self.theme_button.clicked.connect(self._cycle_theme)
-        row.addWidget(self.theme_button)
-        row.addSpacing(4)
-        self.export_button = QPushButton("Export")
-        self.export_button.setToolTip("Write the laser paths for the machine (⌘E)")
-        self.export_button.clicked.connect(self.export_cli)
-        row.addWidget(self.export_button)
-        row.addSpacing(4)
-        self.slice_button = QPushButton("Slice")
-        self.slice_button.setObjectName("primary")
-        self.slice_button.setToolTip("Slice all parts (⌘R)")
-        self.slice_button.setMinimumWidth(120)
-        self.slice_button.clicked.connect(self.start_slicing)
-        row.addWidget(self.slice_button)
-        return bar
-
-    def _build_sidebar(self) -> QWidget:
-        inner = QWidget()
-        col = QVBoxLayout(inner)
-        col.setContentsMargins(0, 0, 6, 0)
-        col.setSpacing(10)
-        self.parts = PartsPanel()
-        self.settings = SettingsPanel()
-        self._themed += [self.parts, self.settings]
-        col.addWidget(self.parts)
-        col.addWidget(self.settings)
-        col.addStretch()
-        scroll = QScrollArea()
-        scroll.setWidget(inner)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        side = QWidget()
-        side.setMinimumWidth(400)
-        side.setMaximumWidth(560)
-        outer = QVBoxLayout(side)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(8)
-        outer.addWidget(scroll, 1)
-
-        self.progress_card = QFrame()
-        self.progress_card.setObjectName("card")
-        pc = QVBoxLayout(self.progress_card)
-        pc.setContentsMargins(14, 10, 14, 10)
-        top = QHBoxLayout()
-        self.stage = QLabel("Working…")
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.cancel)
-        top.addWidget(self.stage, 1)
-        top.addWidget(self.cancel_button)
-        pc.addLayout(top)
-        self.progress = QProgressBar()
-        self.progress.setTextVisible(False)
-        pc.addWidget(self.progress)
-        self.progress_card.hide()
-        outer.addWidget(self.progress_card)
-        return side
-
-    def _build_main(self) -> QWidget:
-        w = QWidget()
-        col = QVBoxLayout(w)
-        col.setContentsMargins(6, 0, 0, 0)
-        col.setSpacing(10)
-
-        self.banner = QFrame()
-        self.banner.setObjectName("banner")
-        bl = QHBoxLayout(self.banner)
-        bl.setContentsMargins(14, 8, 8, 8)
-        self.banner_icon = QLabel()
-        text = QLabel("Parts or settings changed since this slice. The view is out of date "
-                      "and can't be exported.")
-        text.setWordWrap(True)
-        again = QPushButton("Slice again")
-        again.setObjectName("primary")
-        again.clicked.connect(self.start_slicing)
-        bl.addWidget(self.banner_icon)
-        bl.addWidget(text, 1)
-        bl.addWidget(again)
-        self.banner.hide()
-        col.addWidget(self.banner)
-
-        viewer = QFrame()
-        viewer.setObjectName("card")
-        vc = QVBoxLayout(viewer)
-        vc.setContentsMargins(12, 10, 12, 10)
-        vc.setSpacing(8)
-
-        top = QHBoxLayout()
-        self.view_switch = Segmented([("Layers", "slice"), ("3D", "cube"), ("Build layout", "layout")])
-        self.view_switch.changed.connect(self._view_changed)
-        self._themed.append(self.view_switch)
-        top.addWidget(self.view_switch)
-        top.addStretch()
-        self.chips = {}
-        for text, name, on, tip in [("Outlines", "show_contours", True, "Part outlines (holes in blue)"),
-                                    ("Hatches", "show_hatches", True, "Fill lines"),
-                                    ("Travel", "show_travel", False, "Laser-off moves between lines"),
-                                    ("Scan order", "scan_order", False, "Colour the fill from first (yellow) "
-                                                                         "to last (purple)"),
-                                    ("Grid", "show_grid", True, "mm grid")]:
-            c = chip(text, on, tip)
-            c.toggled.connect(lambda checked, n=name: self._set_view_option(n, checked))
-            _keep_space(c)
-            self.chips[name] = c
-            top.addWidget(c)
-        self.fit_button = tool_button("fit", "", "Fit the view (⌘0)")
-        self.fit_button.clicked.connect(self._fit_views)
-        top.addWidget(self.fit_button)
-        vc.addLayout(top)
-
-        # views + the vertical layer slider, or an empty state before the first slice
-        self.pages = QStackedWidget()
-        self.empty = EmptyState("drop", "Drop models here",
-                                "STL, OBJ, PLY or 3MF. Or open a project.", "Add models")
-        self.empty.button.clicked.connect(self.add_models_dialog)
-        self._themed.append(self.empty)
-        self.pages.addWidget(self.empty)
-
-        stage = QWidget()
-        sl = QHBoxLayout(stage)
-        sl.setContentsMargins(0, 0, 0, 0)
-        self.views = QStackedWidget()
-        self.view = LayerView()
-        self.stack_view = StackView()
-        self.layout_view = LayoutView()
-        for v in (self.view, self.stack_view, self.layout_view):
-            self.views.addWidget(v)
-        sl.addWidget(self.views, 1)
-        rail = QVBoxLayout()
-        rail.setSpacing(4)
-        self.top_z = QLabel()
-        self.top_z.setObjectName("hint")
-        self.top_z.setAlignment(Qt.AlignHCenter)
-        self.slider = QSlider(Qt.Vertical)
-        self.slider.setToolTip("Layer · ← → step · PgUp/PgDn ±10 · Home/End · Space plays the laser")
-        self.slider.setEnabled(False)
-        self.slider.valueChanged.connect(self._layer_changed)
-        self.bottom_z = QLabel()
-        self.bottom_z.setObjectName("hint")
-        self.bottom_z.setAlignment(Qt.AlignHCenter)
-        rail.addWidget(self.top_z)
-        rail.addWidget(self.slider, 1, Qt.AlignHCenter)
-        rail.addWidget(self.bottom_z)
-        for part in (self.top_z, self.slider, self.bottom_z):
-            _keep_space(part)
-        sl.addLayout(rail)
-        self.pages.addWidget(stage)
-        vc.addWidget(self.pages, 1)
-
-        bottom = QHBoxLayout()
-        self.scan_button = tool_button("laser", "Play laser", "Animate the laser tracing this layer")
-        self.scan_button.clicked.connect(self._toggle_scan)
-        self.flip_button = tool_button("film", "Play layers", "Play through the layers like a flip-book")
-        self.flip_button.clicked.connect(self._toggle_flipbook)
-        self.view.playback_changed.connect(self._scan_state)
-        _keep_space(self.scan_button)
-        bottom.addWidget(self.scan_button)
-        bottom.addWidget(self.flip_button)
-        bottom.addSpacing(8)
-        self.layer_info = QLabel("No slice yet.")
-        self.layer_info.setObjectName("muted")
-        self.layer_info.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        bottom.addWidget(self.layer_info, 1)
-        vc.addLayout(bottom)
-        col.addWidget(viewer, 1)
-
-        tiles = QGridLayout()
-        tiles.setSpacing(10)
-        self.tiles = {}
-        for i, (key, label) in enumerate([("layers", "Layers"), ("height", "Build height"),
-                                          ("time", "Laser time"), ("parts", "Parts"),
-                                          ("density", "Packing"), ("energy", "Energy density")]):
-            tile = StatTile(label)
-            self.tiles[key] = tile
-            tiles.addWidget(tile, 0, i)
-        col.addLayout(tiles)
-
-        self.details = Card("Details")
-        self.report = QPlainTextEdit()
-        self.report.setReadOnly(True)
-        self.report.setPlaceholderText("The slicing report appears here.")
-        self.report.setMinimumHeight(110)
-        self.report.setMaximumHeight(170)
-        self.details.body.addWidget(self.report)
-        self.details.header.setChecked(False)
-        self._themed.append(self.details)
-        col.addWidget(self.details)
-
-        # keyboard: step through layers while the viewer has focus
-        for keys, step in [((Qt.Key_Right, Qt.Key_Up), 1), ((Qt.Key_Left, Qt.Key_Down), -1),
-                           ((Qt.Key_PageUp,), 10), ((Qt.Key_PageDown,), -10)]:
-            for key in keys:
-                QShortcut(QKeySequence(key), viewer, lambda s=step: self._step(s),
-                          context=Qt.WidgetWithChildrenShortcut)
-        QShortcut(QKeySequence(Qt.Key_Home), viewer, lambda: self._goto(0), context=Qt.WidgetWithChildrenShortcut)
-        QShortcut(QKeySequence(Qt.Key_End), viewer, lambda: self._goto(10 ** 9),
-                  context=Qt.WidgetWithChildrenShortcut)
-        QShortcut(QKeySequence(Qt.Key_Space), viewer, self._toggle_scan, context=Qt.WidgetWithChildrenShortcut)
-        return w
-
-    def _build_menus(self) -> None:
-        def action(text, slot, shortcut=None):
-            a = QAction(text, self)
-            if shortcut is not None:
-                a.setShortcut(shortcut)
-            a.triggered.connect(slot)
-            self.addAction(a)  # shortcuts work with the menu bar hidden too
-            return a
-
-        self.act_new = action("&New Project", self.new_project, QKeySequence.New)
-        self.act_open = action("&Open Project…", lambda: self.open_project(), QKeySequence.Open)
-        self.act_save = action("&Save Project", self.save_project, QKeySequence.Save)
-        self.act_save_as = action("Save Project &As…", self.save_project_as, QKeySequence.SaveAs)
-        self.act_add = action("&Add Models…", self.add_models_dialog, QKeySequence("Ctrl+I"))
-        self.act_slice = action("S&lice", self.start_slicing, QKeySequence("Ctrl+R"))
-        self.act_export = action("&Export Laser Paths (.cli)…", self.export_cli, QKeySequence("Ctrl+E"))
-        self.act_preview = action("Export &Preview (.html)…", self.export_preview)
-        self.act_quit = action("&Quit", self.close, QKeySequence.Quit)
-        self.act_fit = action("&Fit View", self._fit_views, QKeySequence("Ctrl+0"))
-        self.act_about = action(f"&About {APP_NAME}", self.about)
-        self.act_log = action("Show &Log File", self.show_log)
-
-        bar = self.menuBar()
-        file_menu = bar.addMenu("&File")
-        file_menu.addActions([self.act_new, self.act_open])
-        self.recent_menu = file_menu.addMenu("Open &Recent")
-        self.recent_menu.aboutToShow.connect(self._fill_recent)
-        file_menu.addActions([self.act_save, self.act_save_as])
-        file_menu.addSeparator()
-        file_menu.addAction(self.act_add)
-        file_menu.addSeparator()
-        file_menu.addActions([self.act_export, self.act_preview])
-        file_menu.addSeparator()
-        file_menu.addAction(self.act_quit)
-        bar.addMenu("&Build").addAction(self.act_slice)
-        view_menu = bar.addMenu("&View")
-        view_menu.addAction(self.act_fit)
-        theme_menu = view_menu.addMenu("&Theme")
-        for mode in theme.MODES:
-            theme_menu.addAction(mode.capitalize(), lambda m=mode: self.set_theme(m))
-        help_menu = bar.addMenu("&Help")
-        help_menu.addActions([self.act_about, self.act_log])
-
     # ================================================================ theme
 
     def set_theme(self, mode: str) -> None:
@@ -425,6 +111,7 @@ class MainWindow(QMainWindow):
             b.setIcon(theme.icon(b.property("iconName")))
         self.theme_button.setIcon(theme.icon(THEME_ICONS[theme.mode()]))
         self.theme_button.setToolTip(f"Theme: {THEME_NAMES[theme.mode()]} (click to change)")
+        self.theme_button.setAccessibleName(f"Theme: {THEME_NAMES[theme.mode()]}")
         shadow(self.slice_button, theme.current()["accent"], blur=26, dy=2, alpha=150)
         self.banner_icon.setPixmap(theme.icon("warning", theme.current()["warn_text"]).pixmap(18, 18))
         self._scan_state(self.view.playing())
@@ -688,104 +375,6 @@ class MainWindow(QMainWindow):
         if self.slider.isEnabled():
             self.slider.setValue(min(i, self.slider.maximum()))
 
-    # ================================================================== playback
-
-    def _toggle_scan(self) -> None:
-        if not self.result:
-            return
-        if self.view.playing():
-            self.view.stop_scan()
-        else:
-            self.flipbook.stop()
-            self._flip_state()
-            self.view_switch.set_index(0)
-            self.view.play_scan()
-
-    def _scan_state(self, playing: bool) -> None:
-        self.scan_button.setText("Stop laser" if playing else "Play laser")
-        self.scan_button.setIcon(theme.icon("stop" if playing else "laser"))
-        self.scan_button.setProperty("iconName", "stop" if playing else "laser")
-
-    def _toggle_flipbook(self) -> None:
-        if not self.result:
-            return
-        if self.flipbook.isActive():
-            self.flipbook.stop()
-        else:
-            self.view.stop_scan()
-            if self.slider.value() >= self.slider.maximum():
-                self.slider.setValue(0)
-            self.flipbook.start()
-        self._flip_state()
-
-    def _flip(self) -> None:
-        if self.slider.value() >= self.slider.maximum():
-            self.flipbook.stop()
-            self._flip_state()
-        else:
-            self._step(1)
-
-    def _flip_state(self) -> None:
-        on = self.flipbook.isActive()
-        self.flip_button.setText("Pause layers" if on else "Play layers")
-        self.flip_button.setIcon(theme.icon("pause" if on else "film"))
-        self.flip_button.setProperty("iconName", "pause" if on else "film")
-
-    def _stop_playback(self) -> None:
-        self.view.stop_scan()
-        self.flipbook.stop()
-        self._flip_state()
-
-    # ================================================================== export
-
-    def _default_name(self, ext: str) -> str:
-        base = (os.path.splitext(os.path.basename(self.project_path))[0] if self.project_path
-                else os.path.splitext(os.path.basename(self.result_jobs[0]))[0] if self.result_jobs else "build")
-        return os.path.join(self._last_dir(), base + ext)
-
-    def export_cli(self) -> None:
-        if self.result is None or self.stale:
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Export laser paths", self._default_name(".cli"),
-                                              "Common Layer Interface (*.cli)")
-        if not path:
-            return
-        try:
-            export(self.result, path, self.result_config)
-        except OSError as e:
-            QMessageBox.warning(self, "Export failed", f"Could not write {path}:\n{e.strerror or e}")
-            return
-        self._remember_dir(path)
-        self.toast(f"Exported {os.path.basename(path)}", "export")
-
-    def export_preview(self) -> None:
-        if self.result is None or self.stale:
-            return
-        path, _ = QFileDialog.getSaveFileName(self, "Export preview", self._default_name(".html"), "HTML (*.html)")
-        if not path:
-            return
-        try:
-            write_preview(self.result.layers, path, title=os.path.basename(self._default_name("")),
-                          jump_speed=self.result_config.jump_speed)
-        except OSError as e:
-            QMessageBox.warning(self, "Export failed", f"Could not write {path}:\n{e.strerror or e}")
-            return
-        self._remember_dir(path)
-        self.toast(f"Exported {os.path.basename(path)}", "export")
-
-    # ================================================================== projects
-
-    def maybe_save(self) -> bool:
-        """Ask about unsaved changes. False = the user cancelled."""
-        if not self.dirty or (self.project_path is None and not self.parts.parts()):
-            return True
-        answer = QMessageBox.question(
-            self, "Unsaved changes", "Save the changes to this project first?",
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
-        if answer == QMessageBox.Save:
-            return self.save_project()
-        return answer == QMessageBox.Discard
-
     def _clear(self) -> None:
         self._stop_playback()
         self.parts.clear()
@@ -801,149 +390,6 @@ class MainWindow(QMainWindow):
         for tile in self.tiles.values():
             tile.set("–")
 
-    def new_project(self) -> None:
-        if self.busy() or not self.maybe_save():
-            return
-        self._clear()
-        self.settings.set_config(gui_defaults())
-        self.project_path, self.dirty = None, False
-        self._refresh()
-
-    def open_project(self, path: str | None = None) -> Task | None:
-        if self.busy() or not self.maybe_save():
-            return None
-        if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Open project", self._last_dir(), PROJECT_FILTER)
-            if not path:
-                return None
-        try:
-            project = Project.load(path)
-        except ProjectError as e:
-            QMessageBox.warning(self, "Can't open project", str(e))
-            self._forget_recent(path)
-            return None
-        self._clear()
-        self.settings.set_config(project.config)
-        self.project_path = path
-        self._remember_dir(path)
-        self._add_recent(path)
-        missing = [p for p in project.parts if not os.path.isfile(p.path)]
-        found = [p for p in project.parts if os.path.isfile(p.path)]
-        if missing:
-            QMessageBox.warning(self, "Missing models", "These models were not found and are left out:\n\n"
-                                + "\n".join(p.path for p in missing))
-
-        def done():
-            self.dirty = bool(missing)
-            self._refresh()
-
-        if not found:
-            done()
-            return None
-        return self.add_models([p.path for p in found], [p.copies for p in found], then=done)
-
-    def save_project(self) -> bool:
-        if self.project_path is None:
-            return self.save_project_as()
-        return self._write_project(self.project_path)
-
-    def save_project_as(self) -> bool:
-        start = self.project_path or os.path.join(self._last_dir(), "build" + EXTENSION)
-        path, _ = QFileDialog.getSaveFileName(self, "Save project", start, PROJECT_FILTER)
-        if not path:
-            return False
-        if not path.endswith(PROJECT_EXTENSIONS):
-            path += EXTENSION
-        return self._write_project(path)
-
-    def _write_project(self, path: str) -> bool:
-        try:
-            Project(parts=self.parts.parts(), config=self.settings.config()).save(path)
-        except (OSError, ValueError) as e:
-            QMessageBox.warning(self, "Can't save project", f"Could not write {path}:\n{e}")
-            return False
-        self.project_path, self.dirty = path, False
-        self._remember_dir(path)
-        self._add_recent(path)
-        self.toast(f"Saved {os.path.basename(path)}", "save")
-        self._refresh()
-        return True
-
-    # ================================================================== recent, dirs, state
-
-    def _recent(self) -> list[str]:
-        return [p for p in (self.store.value("recent", []) or []) if isinstance(p, str)]
-
-    def _add_recent(self, path: str) -> None:
-        path = os.path.abspath(path)
-        self.store.setValue("recent", ([path] + [p for p in self._recent() if p != path])[:MAX_RECENT])
-
-    def _forget_recent(self, path: str) -> None:
-        self.store.setValue("recent", [p for p in self._recent() if p != os.path.abspath(path)])
-
-    def _fill_recent(self) -> None:
-        self.recent_menu.clear()
-        recent = self._recent()
-        for path in recent:
-            a = self.recent_menu.addAction(os.path.basename(path))
-            a.setToolTip(path)
-            a.triggered.connect(lambda checked=False, p=path: self.open_project(p))
-        if not recent:
-            self.recent_menu.addAction("No recent projects").setEnabled(False)
-
-    def _last_dir(self) -> str:
-        return self.store.value("last_dir", os.path.expanduser("~"))
-
-    def _remember_dir(self, path: str) -> None:
-        self.store.setValue("last_dir", os.path.dirname(os.path.abspath(path)))
-
-    def _restore_state(self) -> None:
-        if (geometry := self.store.value("geometry")) is not None:
-            self.restoreGeometry(geometry)
-        if (split := self.store.value("splitter")) is not None:
-            self.split.restoreState(split)
-        theme.apply(QApplication.instance(), self.store.value("theme", theme.DEFAULT_MODE))
-        self._restyle()
-        try:
-            saved = self.store.value("last_settings")
-            if saved:
-                self.settings.set_config(config_from_dict(json.loads(saved)))
-        except (ValueError, TypeError):
-            log.warning("ignoring unreadable saved settings")
-
-    def _save_state(self) -> None:
-        self.store.setValue("geometry", self.saveGeometry())
-        self.store.setValue("splitter", self.split.saveState())
-        self.store.setValue("theme", theme.mode())
-        try:
-            self.store.setValue("last_settings", json.dumps(config_to_dict(self.settings.config())))
-        except ValueError:
-            pass
-        self.store.sync()
-
-    # ================================================================== drag & drop
-
-    @staticmethod
-    def _dropped_files(event) -> list[str]:
-        md = event.mimeData()
-        return [u.toLocalFile() for u in md.urls() if u.isLocalFile()] if md.hasUrls() else []
-
-    def dragEnterEvent(self, event):
-        files = self._dropped_files(event)
-        if any(f.lower().endswith(MODEL_EXTENSIONS + PROJECT_EXTENSIONS) for f in files) and not self.busy():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        files = self._dropped_files(event)
-        projects = [f for f in files if f.lower().endswith(PROJECT_EXTENSIONS)]
-        models = [f for f in files if f.lower().endswith(MODEL_EXTENSIONS)]
-        event.acceptProposedAction()
-        if projects:
-            self.open_project(projects[0])
-        elif models:
-            self._remember_dir(models[0])
-            self.add_models(models)
-
     # ================================================================== help, close
 
     def about(self) -> None:
@@ -952,7 +398,12 @@ class MainWindow(QMainWindow):
             f"<h3>{APP_NAME} Slicer {__version__}</h3>"
             "<p>The open-source SLS slicer for the XeroForm printer: 3D models in, "
             "laser tool-paths out.</p>"
-            f"<p>Built on PySLM, trimesh and Qt {qVersion()}.</p>")
+            f"<p>Built on PySLM, trimesh and Qt {qVersion()}.</p>"
+            "<p>Released under the MIT License. Includes third-party libraries under their own "
+            "licenses, among them Qt / PySide6 (LGPL-3.0) and PySLM (LGPL-2.1): see "
+            f'<a href="{REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a> '
+            "(also in the app folder).</p>"
+            f'<p><a href="{REPO_URL}">{REPO_URL.removeprefix("https://")}</a></p>')
 
     def show_log(self) -> None:
         if self.log_path and os.path.exists(self.log_path):

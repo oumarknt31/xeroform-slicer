@@ -164,6 +164,7 @@ def tool_button(icon_name: str, text: str = "", tip: str = "") -> QToolButton:
         b.setText(text)
         b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
     b.setToolTip(tip or text)
+    b.setAccessibleName(text or tip)  # icon-only buttons still need a name for screen readers
     return b
 
 

@@ -1,17 +1,25 @@
 name: Installers
 
-# Runs each one-line installer against the latest release on a fresh machine,
-# then checks the installed app carries no "downloaded from the internet" mark
-# (so there's no security prompt) and that it starts and slices.
+# After each published release (or on demand), run every one-line installer on a
+# fresh machine against that release, then check the installed app starts and
+# slices. A separate step checks the premise the installers rely on: a file
+# downloaded from the command line carries no "downloaded from the internet"
+# mark (which is what triggers the macOS / Windows security prompt).
 on:
   workflow_dispatch:
   workflow_run:
     workflows: [Release]
     types: [completed]
 
+permissions:
+  contents: read
+
 jobs:
   install:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # only after a tag push that actually published a release, not a build-only dry run
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     strategy:
       fail-fast: false
       matrix:
@@ -20,37 +28,54 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       XEROFORM_NO_OPEN: "1"
+      # the release this run is for (its tag), or the latest one when run by hand
+      XEROFORM_RELEASE_URL: >-
+        ${{ github.event_name == 'workflow_run'
+            && format('https://github.com/{0}/releases/download/{1}', github.repository, github.event.workflow_run.head_branch)
+            || format('https://github.com/{0}/releases/latest/download', github.repository) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Qt system libraries
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
+      - name: Command-line downloads carry no download mark (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL "$XEROFORM_RELEASE_URL/SHA256SUMS.txt" -o probe.txt
+          if xattr probe.txt | grep -q com.apple.quarantine; then echo "curl download is quarantined"; exit 1; fi
+      - name: Command-line downloads carry no download mark (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "$env:XEROFORM_RELEASE_URL/SHA256SUMS.txt" -OutFile probe.txt -UseBasicParsing
+          if (Get-Item probe.txt -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw "download is marked" }
 
       - name: Install and check (macOS)
         if: runner.os == 'macOS'
         env:
           XEROFORM_DEST: ${{ runner.temp }}/Applications
         run: |
-          mkdir -p "$XEROFORM_DEST"
           sh install/install-mac.sh
-          if xattr -r "$XEROFORM_DEST/XeroForm.app" | grep -q quarantine; then echo "quarantined!"; exit 1; fi
           "$XEROFORM_DEST/XeroForm.app/Contents/MacOS/XeroForm" --smoke-test
-
+          sh install/install-mac.sh   # running it again updates in place
+          "$XEROFORM_DEST/XeroForm.app/Contents/MacOS/XeroForm" --smoke-test
       - name: Install and check (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:XEROFORM_DEST = Join-Path $env:RUNNER_TEMP 'Programs'
           ./install/install-windows.ps1
+          ./install/install-windows.ps1   # running it again updates in place
           $exe = Join-Path $env:XEROFORM_DEST 'XeroForm\XeroForm.exe'
-          if (Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw "marked as downloaded" }
           if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'XeroForm.lnk'))) { throw "no shortcut" }
           $p = Start-Process $exe -ArgumentList '--smoke-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "smoke test failed: exit $($p.ExitCode)" }
-
       - name: Install and check (Linux)
         if: runner.os == 'Linux'
         run: |
           sh install/install-linux.sh
-          test -f "$HOME/.local/share/applications/xeroform.desktop"
+          sh install/install-linux.sh   # running it again updates in place
+          grep -q '^Exec="' "$HOME/.local/share/applications/xeroform.desktop"
+          test -f "$(sed -n 's/^Icon=//p' "$HOME/.local/share/applications/xeroform.desktop")"
           "$HOME/.local/bin/xeroform-gui" --smoke-test

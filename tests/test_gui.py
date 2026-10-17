@@ -6,7 +6,7 @@ import trimesh
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
-from PySide6.QtCore import QEventLoop, QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl  # noqa: E402
+from PySide6.QtCore import QEventLoop, QMimeData, QPointF, QSettings, Qt, QTimer, QUrl  # noqa: E402
 from PySide6.QtGui import QDropEvent  # noqa: E402
 from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
@@ -322,3 +322,17 @@ def test_garbage_is_collected_on_the_gui_thread_only(window):
     assert not gc.isenabled() and len(app.findChildren(_MainThreadGC)) == 1
     MainWindow().deleteLater()  # a second window doesn't install a second collector
     assert len(app.findChildren(_MainThreadGC)) == 1
+
+
+def test_every_button_has_a_name_for_screen_readers(window):
+    """Icon-only buttons (theme, fit) must still be announced by screen readers."""
+    buttons = window.findChildren(QtWidgets.QAbstractButton)
+    nameless = [b for b in buttons if b.isVisibleTo(window) and not (b.text() or b.accessibleName())]
+    assert not nameless, [b.objectName() or b.toolTip() for b in nameless]
+
+
+def test_about_mentions_the_license(window, monkeypatch):
+    shown = []
+    monkeypatch.setattr(QMessageBox, "about", lambda parent, title, text: shown.append(text))
+    window.about()
+    assert "MIT License" in shown[0] and "THIRD_PARTY_NOTICES" in shown[0]

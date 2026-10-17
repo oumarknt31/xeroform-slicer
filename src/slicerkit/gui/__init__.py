@@ -65,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
 
     from .. import __version__
     from ..project import EXTENSION, LEGACY_EXTENSIONS
-    from .window import APP_NAME, MainWindow
+    from .constants import APP_NAME
+    from .window import MainWindow
 
     argv = sys.argv if argv is None else argv
     if "--smoke-test" in argv:

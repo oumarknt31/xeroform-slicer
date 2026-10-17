@@ -144,7 +144,7 @@ QFrame#accentLine {{ min-height: 1px; max-height: 1px; border: none;
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 transparent, stop:0.35 {accent_line},
                                 stop:0.5 {accent}, stop:0.65 {accent_line}, stop:1 transparent); }}
 QLabel#wordmark {{ font-size: 18px; font-weight: 800; }}
-QLabel#wordmarkSub {{ color: {accent}; font-size: 10px; font-weight: 700; }}
+QLabel#wordmarkSub {{ color: {accent}; font-size: 11px; font-weight: 700; }}
 QFrame#pill {{ background: {base}; border: 1px solid {border}; border-radius: 15px; }}
 QLabel#pillTitle {{ font-weight: 600; }}
 QLabel#muted, QLabel#hint {{ color: {muted}; }}
@@ -238,7 +238,7 @@ QFrame#tile QLabel {{ background: transparent; }}
 QFrame#tileBar {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {accent_glow}, stop:1 {accent});
                   border-radius: 2px; min-width: 3px; max-width: 3px; }}
 QLabel#tileValue {{ font-size: 19px; font-weight: 700; }}
-QLabel#tileLabel {{ color: {muted}; font-size: 10px; font-weight: 700; }}
+QLabel#tileLabel {{ color: {muted}; font-size: 11px; font-weight: 700; }}
 QFrame#toast {{ background: {toast_bg}; border: 1px solid {border_hi}; border-radius: 12px; }}
 QFrame#toast QLabel {{ color: {toast_text}; background: transparent; }}
 QLabel#emptyTitle {{ font-size: 18px; font-weight: 700; }}

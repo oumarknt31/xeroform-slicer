@@ -1,233 +1,245 @@
 # XeroForm Slicer
 
-The open-source **SLS slicer** for the XeroForm low-cost SLS 3D printer.
-It turns a 3D model (STL) into laser tool-paths and writes them to a machine
-file:
+XeroForm Slicer is the open-source slicer for the XeroForm low-cost SLS
+(selective laser sintering) 3D printer. It turns 3D models (STL, OBJ, PLY or
+3MF) into laser tool-paths and writes them to a machine file:
 
+```text
+load model  ->  slice into layers  ->  hatch (outlines + laser fill)  ->  export (.cli)
 ```
-load (STL)  ->  slice (layers)  ->  hatch (contour + laser fill)  ->  export (.cli)
-```
 
-Built in Python on the open-source [PySLM](https://pyslm.readthedocs.io) library.
+It comes as a desktop app for macOS, Windows and Linux, a command-line tool and
+a Python library, built on the open-source [PySLM](https://pyslm.readthedocs.io)
+slicing library.
 
-## Why it's structured this way
+## Install the app
 
-- **Standalone engine/library** — no GUI baked in; a CLI and (later) a Qt GUI
-  just call it. (Deliverable decision: standalone engine, per Petr.)
-- **Thin wrapper over PySLM** — PySLM's objects are translated into slicerkit's
-  own `Layer` model in exactly one place (`slicing.py`). Swapping the slicing
-  backend later touches only that file.
-- **Pluggable exporter** — the engine writes through the `Exporter` interface,
-  so matching the printer's real `.cli` dialect (or adding binary CLI / OVF) is
-  a new file in `export/`, nothing else.
-
-## Download the app
-
-Install or update with one line - no Python, no security prompts:
+Each command below installs or updates XeroForm. No Python is needed and no
+security prompt appears.
 
 ```bash
 # Mac (Terminal)
 curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-mac.sh | sh
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-windows.ps1 | iex
-# Linux
+# Linux (x86-64)
 curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-linux.sh | sh
 ```
 
-Or download from the [Releases page](https://github.com/oumarknt31/xeroform-slicer/releases/latest);
-the release notes explain the one-time security prompt for manual downloads.
+The installer picks the right build for your computer, checks the download
+against the release's `SHA256SUMS.txt`, and waits for you to quit a running
+XeroForm instead of closing it. You can also download the app manually from the
+[latest release](https://github.com/oumarknt31/xeroform-slicer/releases/latest);
+its notes explain the one-time security prompt for manual downloads.
 
-## Install from source
+## Use the desktop app
 
-```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .            # add [dev] for tests:  pip install -e ".[dev]"
-```
+Start it from Applications, the Start menu or your app menu, or run
+`xeroform-gui` (optionally with model or `.xeroform` project files).
 
-For the desktop app add `[gui]` (PySide6):  `pip install -e ".[dev,gui]"`.
-
-The package on PyPI that provides `import pyslm` is **PythonSLM** (installed
-automatically as a dependency).
-
-## Use
-
-Desktop app (the old `slicerkit` / `slicerkit-gui` commands still work):
-
-```bash
-xeroform-gui                  # or: xeroform-gui part.stl other.stl  |  xeroform-gui job.xeroform
-```
-
-- **Look**: XeroForm branding (the logo is rebuilt as vector art by
-  `tools/build_logo.py`), dark graphite with a laser-orange accent and glows; a soft-grey
-  light mode (no white). The moon/sun button in the header switches dark / light / system.
-- **Parts**: add models (or drop them on the window) and set copies per model. A
-  warning icon marks a model with repairs or a likely units problem - hover it.
-- **Settings**: collapsible cards; every setting has a tooltip; *Reset to defaults*.
-  The build volume starts as a 150 mm placeholder until the machine is known.
-- **Slice** (⌘R) runs in the background with progress and Cancel; models load in
-  the background too. Headline numbers appear as tiles: layers, build height,
-  laser time, parts, packing density, energy density. The full report is under
-  *Details*.
+- **Parts**: add models, or drop them on the window, and set copies per model. A
+  warning icon marks a model with repairs or a likely units problem; hover it
+  for details.
+- **Settings**: grouped in collapsible cards, each with a tooltip. *Reset to
+  defaults* restores them. The build volume starts as a 150 mm placeholder until
+  the machine is known.
+- **Slice** (⌘R / Ctrl+R): runs in the background with progress and Cancel.
+  Tiles show layers, build height, laser time, parts, packing density and energy
+  density; the full report is under *Details*.
 - **Views**, with a vertical layer slider (←/→, PgUp/PgDn ±10, Home/End):
-  - *Layers*: one layer from above - outlines, hatches, travel moves, scan order,
-    mm grid; cursor position in mm. **Play laser** (Space) animates the laser
-    tracing the layer in true scan order.
-  - *3D*: the sliced contours stacked in 3D; drag to orbit, scroll to zoom. The
-    selected layer is a filled cut, layers above it are ghosted.
-  - *Build layout*: every packed part from above, labelled and coloured by
-    stacking level (hover for details).
-  - **Play layers** runs through the whole build like a flip-book.
-- **Out of date**: change a part or setting after slicing and a banner says so;
-  exporting is blocked until you slice again.
-- **Projects** (`.xeroform`, JSON; older `.slicerkit` files still open): save/open the parts list and every
-  setting; model paths are stored relative to the project file. Open Recent,
-  and a prompt before unsaved changes are lost.
-- **Export** (⌘E) writes the `.cli`; nothing is written until then.
-- The window remembers its size, theme, last folder and last settings.
-  Unexpected errors show their details and go to a log file (*Help ▸ Show Log File*).
+  - *Layers*: one layer from above with outlines, hatches, travel moves, scan
+    order and a mm grid. **Play laser** (Space) animates the laser tracing the
+    layer in scan order.
+  - *3D*: the sliced contours stacked in 3D. Drag to orbit, scroll to zoom.
+  - *Build layout*: every packed part from above, coloured by stacking level.
+  - **Play layers** runs through the build like a flip-book.
+- **Out of date**: if you change a part or setting after slicing, a banner says
+  so and exporting stays blocked until you slice again.
+- **Projects** (`.xeroform`, JSON): save the parts list and every setting. Model
+  paths are stored relative to the project file. Older `.slicerkit` projects
+  still open.
+- **Export** (⌘E / Ctrl+E) writes the `.cli` file. Nothing is written before
+  that.
+- **Look**: dark graphite with a laser-orange accent, or a soft-grey light mode.
+  The moon/sun button in the header switches between dark, light and system.
 
-Command line:
+The window remembers its size, theme, last folder and last settings. Unexpected
+errors show their details and go to a log file (*Help ▸ Show Log File*).
+
+## Use the command line
+
+The `xeroform` command slices without the app. The examples write `model.cli`
+from `model.stl`:
 
 ```bash
-xeroform model.stl -o model.cli --layer 0.1 --hatch-distance 0.2 --hatch-rotation 67
-# or:  python -m slicerkit model.stl -o model.cli
+xeroform model.stl -o model.cli --layer 0.1 --hatch-distance 0.2
 
-# also write an interactive layer preview (open it in any browser):
+# also write an interactive layer preview to open in a browser
 xeroform model.stl -o model.cli --preview model.html
 
-# model in inches? check it fits the machine?
+# a model drawn in inches, checked against the machine's build volume
 xeroform model.stl -o model.cli --scale 25.4 --build-volume 150 150 150
 
-# pack several parts (and copies) into one build:
+# pack several parts and copies into one build
 xeroform bracket.stl gear.stl --copies 5 -o build.cli --build-volume 150 150 150
 
-# laser settings (W, mm/s) - defaults are placeholders until the laser is chosen:
+# laser settings in W and mm/s (the defaults are placeholders)
 xeroform model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
-          --contour-power 4 --contour-speed 400 --jump-speed 2000
+    --contour-power 4 --contour-speed 400 --jump-speed 2000
 ```
+
+Run `xeroform --help` for every option. `python -m slicerkit` works too.
 
 ### Model checks
 
-Input can be STL, OBJ, PLY or 3MF. Before slicing, slicerkit:
+Before slicing, XeroForm checks each model:
 
-- **repairs** what is safe to fix automatically - zero-area/duplicate triangles,
-  small holes in the surface, inside-out faces - and lists what it changed;
-- **refuses** models it can't slice correctly (big gaps in the surface, no
-  volume, unreadable files) with a message saying what to do;
-- **warns** when the size suggests wrong units (STL has none - inch CAD parts
-  arrive 25.4x too small); fix with `--scale`;
-- **centres** the part on the platform: x = y = 0 is the middle of the plate,
-  z = 0 its bottom. With `--build-volume X Y Z` it also refuses parts that
-  don't fit.
+- **Repairs** what is safe to fix automatically: zero-area or duplicate
+  triangles, small holes in the surface and inside-out faces. It lists what it
+  changed.
+- **Refuses** models it can't slice correctly, such as large gaps in the surface,
+  no volume or unreadable files, with a message saying what to do.
+- **Warns** when the size suggests wrong units. STL files carry no units, so
+  inch CAD parts arrive 25.4 times too small; fix that with `--scale 25.4`.
+- **Centres** the part on the plate (x = y = 0 is the middle, z = 0 the bottom)
+  and, with `--build-volume X Y Z`, refuses parts that don't fit.
 
-### Packing several parts (nesting)
+### Packing several parts
 
-Give several files and/or `--copies N` and slicerkit packs them into one build
-(`--build-volume` is required). SLS needs no supports, so parts go side by side
-*and* stacked. The packer:
+Give several files or `--copies N`, together with `--build-volume`, and
+XeroForm packs everything into one build. SLS needs no supports, so parts can
+sit side by side and stacked. The packer:
 
-- keeps the build as low as possible - every layer costs a powder recoat - so it
-  fills the floor first and stacks only when it must;
-- keeps `--part-spacing` (default 3 mm) between parts and from the walls;
-- may turn parts 90° about Z to fit (`--no-rotate` to stop it), never tips them;
-- grows a compact block and centres it on the plate, where the bed is most even.
+- keeps the build as low as possible, because every layer costs a powder
+  recoat;
+- keeps `--part-spacing` (3 mm by default) between parts and from the walls;
+- may turn parts 90° about Z to fit (`--no-rotate` turns this off), but never
+  tips them over;
+- centres the packed block on the plate, where the powder bed is most even.
 
-It packs bounding boxes, so odd shapes leave unused space. The run prints the
-build height and **packing density** (part volume / plate area x height). If
-parts don't fit, it says how many and which are left over.
+It packs bounding boxes, so irregular shapes leave unused space. The run prints
+the build height and packing density (part volume / plate area × height), and
+names the parts that don't fit.
 
 ### Scan order
 
-`--scan-order` sets the order the fill vectors are scanned in. PySLM's own
-order (`raster`) points every vector the same way, so the laser jumps back
-across the part with the beam off after each one - as far as it travels with
-the beam on.
+`--scan-order` sets the order of the fill lines. PySLM's own order (`raster`)
+points every line the same way, so the laser jumps back across the part with
+the beam off after each one.
 
-| mode | what it does | laser-off travel on test parts vs `raster` |
+| Mode | What it does | Laser-off travel vs `raster` on test parts |
 |---|---|---|
-| `nearest` (default) | always continues with the closest unscanned vector | 94-99% less |
-| `meander` | zig-zags line by line across the whole layer, holes and gaps included | 72-99% less (worst with holes) |
-| `raster` | every vector the same direction | - |
+| `nearest` (default) | continues with the closest unscanned line | 94–99% less |
+| `meander` | zig-zags line by line across the layer | 72–99% less, worst with holes |
+| `raster` | every line in the same direction | baseline |
 
-That made the estimated laser time 17-23% shorter at a 2000 mm/s jump speed,
-and matters more on a slow-jumping gantry machine. Turn on *Scan order* and
-*Travel moves* in the preview to see the difference.
+On the test parts this cut the estimated laser time by 17–23% at a 2000 mm/s
+jump speed. It matters more on a slow gantry machine.
 
 ### Output
 
-Every run prints an estimated laser time (scanning only - no recoating or
-heating) and the fill **energy density** `P / (v * h)` in J/mm², the main number
-to tune per material.
+Every run prints the estimated laser time (scanning only, without recoating or
+heating) and the fill energy density `P / (v × h)` in J/mm², the main number to
+tune per powder. Laser settings are stored in physical units and converted by
+each exporter; standard ASCII CLI has no field for them.
 
-Laser settings are stored in physical units on each contour/hatch
-(`ScanParams`). Each exporter converts them to what its controller wants
-(percent, PWM, G-code `S`/`F`); standard ASCII CLI has no field for them.
+## Use it from Python
 
-The preview steps through layers (slider or ← →) and shows outlines (holes in
-blue), hatch fill, laser-off travel moves and scan order, plus per-layer
-laser-on / travel length. Use `--preview-every N` to keep the file small for big
-parts.
-
-From Python:
+The same pipeline is available as a library:
 
 ```python
-from slicerkit import slice_file, SliceConfig
+from slicerkit import SliceConfig, slice_file, write_preview
 
 layers = slice_file("model.stl", "model.cli",
                     SliceConfig(layer_thickness=0.1, hatch_distance=0.2))
 print(len(layers), "layers")
-
-from slicerkit import write_preview
 write_preview(layers, "model.html")
 ```
 
-## Layout
+## How it's built
 
-```
+- **Standalone engine.** The slicer is a library; the command line and the
+  desktop app both call it.
+- **One boundary with PySLM.** PySLM's objects become XeroForm's own `Layer`
+  model in exactly one place (`slicing.py`), so swapping the slicing backend
+  touches only that file.
+- **Pluggable exporters.** Output goes through the `Exporter` interface, so the
+  printer's final file format (a `.cli` dialect, binary CLI or G-code) is one
+  new file in `export/`.
+
+```text
 src/slicerkit/
-  part.py        # load, repair, check + place the mesh (wraps PySLM)
-  slicing.py     # part -> layers   (the PySLM -> slicerkit translation lives here)
-  hatching.py    # hatch/contour settings (wraps PySLM Hatcher)
-  scan_order.py  # order/direction of fill vectors (nearest, meander, raster)
-  nesting.py     # pack several parts into one build volume
-  layers.py      # slicerkit's own Layer / Contour / Hatch / ScanParams data model
-  laser.py       # LaserSettings, path lengths, scan-time estimate
-  config.py      # SliceConfig + material/machine profiles
-  export/
-    base.py      # Exporter interface
-    cli_ascii.py # ASCII .cli writer
-  pipeline.py    # orchestrates the stages
-  summary.py     # the text report shared by CLI and GUI
-  project.py     # .slicerkit project files (parts + settings, JSON)
-  gui/           # PySide6 app: window, panels, views (layer/3D/layout), theme, widgets, tasks
-    assets/      # XeroForm logo (SVG, generated by tools/build_logo.py)
-  preview.py     # interactive HTML layer viewer
-  __main__.py    # CLI entry point
-tests/           # round-trip export, slicing correctness
-examples/        # sample_cube.py
+  part.py         load, repair, check and place a mesh
+  slicing.py      part -> layers (the only PySLM -> XeroForm translation)
+  hatching.py     hatch and contour settings
+  scan_order.py   order and direction of fill lines
+  nesting.py      pack several parts into one build
+  layers.py       the Layer / Contour / Hatch / ScanParams model
+  laser.py        laser settings, path lengths, time estimate
+  config.py       SliceConfig
+  pipeline.py     runs the stages
+  export/         Exporter interface and the ASCII .cli writer
+  preview.py      interactive HTML layer viewer
+  summary.py      the text report shared by the command line and the app
+  project.py      .xeroform project files
+  __main__.py     command line
+  gui/            desktop app (window, panels, views, theme, background tasks)
+    assets/       XeroForm logo as SVG
+tests/            unit, pipeline and headless GUI tests
+tools/            build_logo.py (logo SVGs), make_icons.py (app icons)
+packaging/        PyInstaller recipe and release notes
+install/          one-line installers
+.github/          tests, release builds, installer tests, Dependabot
 ```
 
-## Status & next steps
+## Development
 
-- [x] load -> slice -> hatch -> export pipeline working end to end
-- [x] ASCII `.cli` export, verified with a lossless round-trip test
-- [x] contours follow the CLI orientation convention (outer CCW / flag 1, holes CW / flag 0)
-- [x] hatch angle rotates per layer (`hatch_angle_increment`, default 67°; 0 = fixed)
-- [x] interactive HTML layer preview (`--preview`)
-- [x] laser power / speed per vector type, scan-time estimate, energy density
-- [x] mesh checks/repairs, units warning, platform centring, build-volume check
-- [x] scan order (`nearest` / `meander` / `raster`) - cuts laser-off travel 72-99%
-- [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
-- [ ] tune layer thickness / hatch parameters for nylon
-- [x] 3D nesting: several parts / copies packed into one build (bounding boxes)
-- [x] PySide6 desktop GUI: projects, background loading/slicing, layer + build-layout views
-- [x] packaged apps for macOS / Windows / Linux, built and smoke-tested by GitHub Actions on each version tag
-- [ ] code signing (removes the first-launch security prompt)
+Install from source with the test and app extras:
 
-> The ASCII `.cli` output is structurally valid and self-consistent, and the
-> POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and
-> how the firmware uses the direction flag still need to be confirmed — all of
-> that lives in `export/cli_ascii.py`.
->
-> `trimesh` is capped below 6: PySLM 0.6 calls `Path.to_planar`, which trimesh has
-> deprecated (it emits a DeprecationWarning on every slice).
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev,gui]"
+pytest -q                                         # GUI tests need QT_QPA_PLATFORM=offscreen on a server
+ruff check src tests tools
+```
+
+The package that provides `import pyslm` on PyPI is **PythonSLM**; it installs
+automatically.
+
+To publish a release, set `__version__` in `src/slicerkit/__init__.py`, add an
+entry to [CHANGELOG.md](CHANGELOG.md), then push a tag:
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+GitHub Actions builds the app for macOS (Apple Silicon and Intel), Windows and
+Linux, checks each build starts and slices, publishes the release with
+`SHA256SUMS.txt`, and then tests every installer against it. Every push to
+`main` runs the tests on all three systems.
+
+## Status
+
+Done: slicing with orientation-correct contours, per-layer hatch rotation,
+laser settings and time estimate, mesh checks and repairs, scan order, nesting,
+HTML preview, command line, desktop app, packaged releases and installers.
+
+Open:
+
+- **Output format.** The `.cli` file is structurally valid, but the machine's
+  controller and firmware aren't chosen yet, so the units, header keywords and
+  direction-flag handling still need confirming. All of that lives in
+  `export/cli_ascii.py`.
+- **Laser values.** Power, speed and build volume are placeholders until the
+  laser and machine are specified; tuning for nylon follows.
+- **Code signing.** Signing would remove the security prompt for manual
+  downloads (the installers already avoid it).
+
+`trimesh` is capped below version 6 because PySLM 0.6 calls `Path.to_planar`,
+which trimesh has deprecated.
+
+## License
+
+XeroForm Slicer is released under the [MIT License](LICENSE). The packaged apps
+include third-party libraries under their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
