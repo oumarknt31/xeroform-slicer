@@ -47,22 +47,19 @@ class Part:
 
     def __init__(self, mesh_path: str, name: str = "part", scale: float = 1.0,
                  build_volume: tuple[float, float, float] | None = None):
-        mesh = load_mesh(mesh_path)
-        with np.errstate(all="ignore"):  # trimesh divides by zero on degenerate meshes
-            repairs = repair_mesh(mesh)
-        if scale != 1.0:
-            mesh.apply_scale(scale)
-        place_on_platform(mesh)
-        self.report = MeshReport(
-            triangles=len(mesh.faces),
-            bodies=int(mesh.body_count),
-            size=tuple(float(e) for e in mesh.extents),
-            volume=float(mesh.volume),
-            repairs=repairs,
-            warnings=check_size(mesh, build_volume),
-        )
+        mesh, self.report = prepare_mesh(mesh_path, scale)
+        check_fits(mesh, build_volume)
         self._part = pyslm.Part(name)
         self._part.setGeometryByMesh(mesh)
+
+    @classmethod
+    def from_mesh(cls, mesh: trimesh.Trimesh, name: str = "build") -> "Part":
+        """Wrap a mesh that is already checked and placed (e.g. a packed build)."""
+        part = cls.__new__(cls)
+        part.report = describe(mesh)
+        part._part = pyslm.Part(name)
+        part._part.setGeometryByMesh(mesh)
+        return part
 
     @property
     def bounding_box(self):
@@ -76,6 +73,28 @@ class Part:
     def raw_slice(self, z: float):
         """Return the layer's outline polygons at height z (PySLM objects)."""
         return self._part.getVectorSlice(z)
+
+
+def prepare_mesh(path: str, scale: float = 1.0) -> tuple[trimesh.Trimesh, MeshReport]:
+    """Load, repair, scale and centre a model on the platform; report what happened."""
+    mesh = load_mesh(path)
+    with np.errstate(all="ignore"):  # trimesh divides by zero on degenerate meshes
+        repairs = repair_mesh(mesh)
+    if scale != 1.0:
+        mesh.apply_scale(scale)
+    place_on_platform(mesh)
+    report = describe(mesh)
+    report.repairs, report.warnings = repairs, unit_warnings(mesh)
+    return mesh, report
+
+
+def describe(mesh: trimesh.Trimesh) -> MeshReport:
+    return MeshReport(
+        triangles=len(mesh.faces),
+        bodies=int(mesh.body_count),
+        size=tuple(float(e) for e in mesh.extents),
+        volume=float(mesh.volume),
+    )
 
 
 def load_mesh(path: str) -> trimesh.Trimesh:
@@ -130,29 +149,30 @@ def place_on_platform(mesh: trimesh.Trimesh) -> None:
     mesh.apply_translation([-(x0 + x1) / 2, -(y0 + y1) / 2, -z0])
 
 
-def check_size(mesh: trimesh.Trimesh,
-               build_volume: tuple[float, float, float] | None = None) -> list[str]:
-    """Warn about likely unit mistakes; raise MeshError if it doesn't fit the machine."""
-    ext = mesh.extents
-    warnings = []
-    largest = float(ext.max())
+def unit_warnings(mesh: trimesh.Trimesh) -> list[str]:
+    """Warn when the size suggests the model's units are wrong."""
+    largest = float(mesh.extents.max())
     if largest < TINY_MM:
-        warnings.append(
-            f"The model is only {largest:.3g} mm across - check its units. If it was made in "
-            "inches, use a scale of 25.4 (--scale 25.4); in cm use 10, in metres 1000."
-        )
-    elif largest > HUGE_MM:
-        warnings.append(f"The model is {largest:.0f} mm across - check its units (--scale).")
+        return [f"The model is only {largest:.3g} mm across - check its units. If it was made in "
+                "inches, use a scale of 25.4 (--scale 25.4); in cm use 10, in metres 1000."]
+    if largest > HUGE_MM:
+        return [f"The model is {largest:.0f} mm across - check its units (--scale)."]
+    return []
 
-    if build_volume is not None:
-        over = [axis for axis, e, b in zip("XYZ", ext, build_volume) if e > b]
-        if over:
-            raise MeshError(
-                f"The model is {ext[0]:.1f} x {ext[1]:.1f} x {ext[2]:.1f} mm but the build volume "
-                f"is {build_volume[0]:g} x {build_volume[1]:g} x {build_volume[2]:g} mm "
-                f"(too big in {', '.join(over)}). Scale or rotate it to fit."
-            )
-    return warnings
+
+def check_fits(mesh: trimesh.Trimesh,
+               build_volume: tuple[float, float, float] | None = None) -> None:
+    """Raise MeshError if the mesh doesn't fit the build volume."""
+    if build_volume is None:
+        return
+    ext = mesh.extents
+    over = [axis for axis, e, b in zip("XYZ", ext, build_volume) if e > b]
+    if over:
+        raise MeshError(
+            f"The model is {ext[0]:.1f} x {ext[1]:.1f} x {ext[2]:.1f} mm but the build volume "
+            f"is {build_volume[0]:g} x {build_volume[1]:g} x {build_volume[2]:g} mm "
+            f"(too big in {', '.join(over)}). Scale or rotate it to fit."
+        )
 
 
 def _count_open_edges(mesh: trimesh.Trimesh) -> int:

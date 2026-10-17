@@ -18,7 +18,10 @@ def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
                laser: LaserSettings | None = None) -> list[Layer]:
     """Slice the whole part, bottom to top, returning slicerkit Layers.
 
-    With `laser`, every contour and hatch carries its scan parameters.
+    With `laser`, every contour and hatch carries its scan parameters. Empty
+    layers between parts (e.g. the gap between stacked parts in a packed build)
+    are kept: the machine still has to spread powder there. Empty slices at the
+    very bottom and top are dropped.
     """
     hatcher = settings.make_hatcher()
     layers: list[Layer] = []
@@ -27,13 +30,17 @@ def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
     # z from the index, not a running sum, so float error can't accumulate.
     while (z := i * layer_thickness) < z_max:
         boundaries = part.raw_slice(z)
-        if boundaries:  # skip empty slices at the extremes
+        if boundaries:
             hatcher.hatchAngle = settings.angle_for_layer(len(layers))
             pyslm_layer = hatcher.hatch(boundaries)
             layer = _to_layer(pyslm_layer, z, laser)
             _order_hatches(layer, settings.scan_order)
             layers.append(layer)
+        elif layers:
+            layers.append(Layer(z=z))  # powder only
         i += 1
+    while layers and not layers[-1].contours and not layers[-1].hatches:
+        layers.pop()
     return layers
 
 

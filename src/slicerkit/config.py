@@ -21,6 +21,8 @@ class SliceConfig:
     # model placement
     scale: float = 1.0                # e.g. 25.4 for a model drawn in inches
     build_volume: tuple[float, float, float] | None = None  # (x, y, z) mm; None = don't check
+    part_spacing: float = 3.0         # mm between packed parts, and from the walls
+    allow_rotation: bool = True       # let the packer turn parts 90 deg about Z
 
     # laser - placeholders until the laser is chosen and tuned on hardware
     contour_power: float = 4.0        # W
@@ -38,7 +40,7 @@ class SliceConfig:
                      "contour_speed", "hatch_speed", "jump_speed"):
             if not getattr(self, name) > 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)!r}")
-        for name in ("contour_power", "hatch_power"):
+        for name in ("contour_power", "hatch_power", "part_spacing"):
             if not getattr(self, name) >= 0:
                 raise ValueError(f"{name} must be >= 0, got {getattr(self, name)!r}")
         if self.scan_order not in SCAN_ORDERS:

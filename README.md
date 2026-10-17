@@ -45,6 +45,9 @@ slicerkit model.stl -o model.cli --preview model.html
 # model in inches? check it fits the machine?
 slicerkit model.stl -o model.cli --scale 25.4 --build-volume 150 150 150
 
+# pack several parts (and copies) into one build:
+slicerkit bracket.stl gear.stl --copies 5 -o build.cli --build-volume 150 150 150
+
 # laser settings (W, mm/s) - defaults are placeholders until the laser is chosen:
 slicerkit model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
           --contour-power 4 --contour-speed 400 --jump-speed 2000
@@ -63,6 +66,22 @@ Input can be STL, OBJ, PLY or 3MF. Before slicing, slicerkit:
 - **centres** the part on the platform: x = y = 0 is the middle of the plate,
   z = 0 its bottom. With `--build-volume X Y Z` it also refuses parts that
   don't fit.
+
+### Packing several parts (nesting)
+
+Give several files and/or `--copies N` and slicerkit packs them into one build
+(`--build-volume` is required). SLS needs no supports, so parts go side by side
+*and* stacked. The packer:
+
+- keeps the build as low as possible - every layer costs a powder recoat - so it
+  fills the floor first and stacks only when it must;
+- keeps `--part-spacing` (default 3 mm) between parts and from the walls;
+- may turn parts 90° about Z to fit (`--no-rotate` to stop it), never tips them;
+- grows a compact block and centres it on the plate, where the bed is most even.
+
+It packs bounding boxes, so odd shapes leave unused space. The run prints the
+build height and **packing density** (part volume / plate area x height). If
+parts don't fit, it says how many and which are left over.
 
 ### Scan order
 
@@ -117,6 +136,7 @@ src/slicerkit/
   slicing.py     # part -> layers   (the PySLM -> slicerkit translation lives here)
   hatching.py    # hatch/contour settings (wraps PySLM Hatcher)
   scan_order.py  # order/direction of fill vectors (nearest, meander, raster)
+  nesting.py     # pack several parts into one build volume
   layers.py      # slicerkit's own Layer / Contour / Hatch / ScanParams data model
   laser.py       # LaserSettings, path lengths, scan-time estimate
   config.py      # SliceConfig + material/machine profiles
@@ -142,7 +162,8 @@ examples/        # sample_cube.py
 - [x] scan order (`nearest` / `meander` / `raster`) - cuts laser-off travel 72-99%
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
-- [ ] 3D part nesting; PySide/Qt GUI on top of the engine
+- [x] 3D nesting: several parts / copies packed into one build (bounding boxes)
+- [ ] PySide/Qt GUI on top of the engine
 
 > The ASCII `.cli` output is structurally valid and self-consistent, and the
 > POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and
