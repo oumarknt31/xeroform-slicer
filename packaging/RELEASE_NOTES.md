@@ -17,8 +17,14 @@ The app isn't code-signed yet, so the first launch shows a security warning. Tha
 
 **Mac**
 1. Unzip and drag **XeroForm** into **Applications**.
-2. Right-click XeroForm ▸ **Open**, then **Open** again in the dialog. (Double-clicking the first time only shows "can't be opened".)
-   On newer macOS, if there is no Open button: try to open it once, then System Settings ▸ Privacy & Security ▸ **Open Anyway**.
+2. Double-click it. macOS says *"Apple could not verify XeroForm is free of malware…"* - click **Done**.
+   (This appears because the app isn't signed with a paid Apple developer certificate yet; the app itself is fine.)
+3. Open **System Settings ▸ Privacy & Security**, scroll down to *"XeroForm" was blocked…* and click **Open Anyway**,
+   then confirm. XeroForm opens, and macOS won't ask again.
+
+   Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/XeroForm.app`
+
+   On macOS 14 and older you can instead right-click XeroForm ▸ **Open** ▸ **Open**.
 
 **Windows**
 1. Unzip the folder anywhere (for example Documents).
