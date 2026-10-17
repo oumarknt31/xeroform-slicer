@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 from pyslm import hatching
 
+from .scan_order import SCAN_ORDERS
+
 
 class _Hatcher(hatching.Hatcher):
     """PySLM's Hatcher, fixed for regions too narrow for any hatch line.
@@ -30,12 +32,18 @@ class HatchSettings:
                             spreads heat and stress evenly; 0 keeps it fixed.
     hatch_distance        : spacing between fill lines (mm).
     num_inner/outer       : number of contour passes tracing each outline.
+    scan_order            : "nearest", "meander" or "raster" (see scan_order.py).
     """
     hatch_angle: float = 67.0
     hatch_angle_increment: float = 67.0
     hatch_distance: float = 0.2
     num_inner_contours: int = 1
     num_outer_contours: int = 1
+    scan_order: str = "nearest"
+
+    def __post_init__(self):
+        if self.scan_order not in SCAN_ORDERS:
+            raise ValueError(f"Unknown scan order {self.scan_order!r}. Available: {list(SCAN_ORDERS)}")
 
     def angle_for_layer(self, index: int) -> float:
         """Hatch angle (deg, in [0, 180)) for the layer at position `index`."""

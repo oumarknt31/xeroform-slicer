@@ -7,6 +7,7 @@ import sys
 from .pipeline import slice_job
 from .part import MeshError
 from .config import SliceConfig
+from .scan_order import SCAN_ORDERS
 from .preview import write_preview
 from .laser import estimate_scan_time
 
@@ -23,6 +24,9 @@ def main(argv=None) -> int:
     ap.add_argument("--hatch-angle", type=float, default=67.0, help="first-layer hatch angle in deg")
     ap.add_argument("--hatch-rotation", type=float, default=67.0,
                     help="hatch angle added per layer in deg (0 = fixed)")
+    ap.add_argument("--scan-order", choices=SCAN_ORDERS, default="nearest",
+                    help="order of fill vectors: nearest = closest next vector (default, least "
+                         "laser-off travel), meander = zig-zag, raster = all one direction")
     ap.add_argument("--units", type=float, default=1.0, help="mm per .cli coordinate unit")
     ap.add_argument("--scale", type=float, default=1.0,
                     help="scale the model, e.g. 25.4 if it was made in inches")
@@ -49,6 +53,7 @@ def main(argv=None) -> int:
             hatch_distance=args.hatch_distance,
             hatch_angle=args.hatch_angle,
             hatch_angle_increment=args.hatch_rotation,
+            scan_order=args.scan_order,
             units=args.units,
             hatch_power=args.hatch_power,
             hatch_speed=args.hatch_speed,

@@ -11,6 +11,7 @@ from .part import Part
 from .hatching import HatchSettings
 from .layers import Layer, Contour, Hatch, ScanParams, signed_area
 from .laser import LaserSettings
+from .scan_order import order_segments
 
 
 def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
@@ -29,7 +30,9 @@ def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
         if boundaries:  # skip empty slices at the extremes
             hatcher.hatchAngle = settings.angle_for_layer(len(layers))
             pyslm_layer = hatcher.hatch(boundaries)
-            layers.append(_to_layer(pyslm_layer, z, laser))
+            layer = _to_layer(pyslm_layer, z, laser)
+            _order_hatches(layer, settings.scan_order)
+            layers.append(layer)
         i += 1
     return layers
 
@@ -49,6 +52,15 @@ def _to_layer(pyslm_layer, z: float, laser: LaserSettings | None = None) -> Laye
             hatches.append(Hatch(segments=segments, params=laser and laser.hatch))
     contours = _orient_contours(contour_coords, laser and laser.contour)
     return Layer(z=z, contours=contours, hatches=hatches)
+
+
+def _order_hatches(layer: Layer, mode: str) -> None:
+    """Re-order each hatch's vectors for scanning, starting where the contours end."""
+    pos = layer.contours[-1].points[-1] if layer.contours else None
+    for h in layer.hatches:
+        h.segments = order_segments(h.segments, mode, start=pos)
+        if len(h.segments):
+            pos = h.segments[-1, 1]
 
 
 def _orient_contours(contour_coords: list[np.ndarray],

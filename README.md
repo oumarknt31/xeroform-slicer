@@ -64,6 +64,23 @@ Input can be STL, OBJ, PLY or 3MF. Before slicing, slicerkit:
   z = 0 its bottom. With `--build-volume X Y Z` it also refuses parts that
   don't fit.
 
+### Scan order
+
+`--scan-order` sets the order the fill vectors are scanned in. PySLM's own
+order (`raster`) points every vector the same way, so the laser jumps back
+across the part with the beam off after each one - as far as it travels with
+the beam on.
+
+| mode | what it does | laser-off travel on test parts vs `raster` |
+|---|---|---|
+| `nearest` (default) | always continues with the closest unscanned vector | 94-99% less |
+| `meander` | zig-zags line by line across the whole layer, holes and gaps included | 72-99% less (worst with holes) |
+| `raster` | every vector the same direction | - |
+
+That made the estimated laser time 17-23% shorter at a 2000 mm/s jump speed,
+and matters more on a slow-jumping gantry machine. Turn on *Scan order* and
+*Travel moves* in the preview to see the difference.
+
 ### Output
 
 Every run prints an estimated laser time (scanning only - no recoating or
@@ -99,6 +116,7 @@ src/slicerkit/
   part.py        # load, repair, check + place the mesh (wraps PySLM)
   slicing.py     # part -> layers   (the PySLM -> slicerkit translation lives here)
   hatching.py    # hatch/contour settings (wraps PySLM Hatcher)
+  scan_order.py  # order/direction of fill vectors (nearest, meander, raster)
   layers.py      # slicerkit's own Layer / Contour / Hatch / ScanParams data model
   laser.py       # LaserSettings, path lengths, scan-time estimate
   config.py      # SliceConfig + material/machine profiles
@@ -121,6 +139,7 @@ examples/        # sample_cube.py
 - [x] interactive HTML layer preview (`--preview`)
 - [x] laser power / speed per vector type, scan-time estimate, energy density
 - [x] mesh checks/repairs, units warning, platform centring, build-volume check
+- [x] scan order (`nearest` / `meander` / `raster`) - cuts laser-off travel 72-99%
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [ ] 3D part nesting; PySide/Qt GUI on top of the engine

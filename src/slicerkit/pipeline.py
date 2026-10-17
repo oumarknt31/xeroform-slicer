@@ -35,6 +35,7 @@ def slice_job(input_path: str, output_path: str, config: SliceConfig | None = No
         hatch_distance=config.hatch_distance,
         num_inner_contours=config.num_inner_contours,
         num_outer_contours=config.num_outer_contours,
+        scan_order=config.scan_order,
     )
     layers = slice_part(part, settings, config.layer_thickness, config.laser_settings())
     if not layers:

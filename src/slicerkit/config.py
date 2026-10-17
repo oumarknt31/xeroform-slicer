@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 
 from .laser import LaserSettings
 from .layers import ScanParams
+from .scan_order import SCAN_ORDERS
 
 
 @dataclass
@@ -15,6 +16,7 @@ class SliceConfig:
     hatch_distance: float = 0.2       # mm
     num_inner_contours: int = 1
     num_outer_contours: int = 1
+    scan_order: str = "nearest"       # "nearest", "meander" or "raster" - see scan_order.py
 
     # model placement
     scale: float = 1.0                # e.g. 25.4 for a model drawn in inches
@@ -39,6 +41,8 @@ class SliceConfig:
         for name in ("contour_power", "hatch_power"):
             if not getattr(self, name) >= 0:
                 raise ValueError(f"{name} must be >= 0, got {getattr(self, name)!r}")
+        if self.scan_order not in SCAN_ORDERS:
+            raise ValueError(f"scan_order must be one of {list(SCAN_ORDERS)}, got {self.scan_order!r}")
         if self.build_volume is not None:
             if len(self.build_volume) != 3 or not all(v > 0 for v in self.build_volume):
                 raise ValueError(f"build_volume must be 3 sizes > 0 (x, y, z), got {self.build_volume!r}")
