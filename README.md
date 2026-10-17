@@ -23,9 +23,19 @@ Built in Python on the open-source [PySLM](https://pyslm.readthedocs.io) library
 
 ## Download the app
 
-Ready-to-run apps for macOS, Windows and Linux are on the
-[Releases page](https://github.com/oumarknt31/xeroform-slicer/releases/latest) - no
-Python needed. The release notes explain the one-time security prompt.
+Install or update with one line - no Python, no security prompts:
+
+```bash
+# Mac (Terminal)
+curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-mac.sh | sh
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-windows.ps1 | iex
+# Linux
+curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-linux.sh | sh
+```
+
+Or download from the [Releases page](https://github.com/oumarknt31/xeroform-slicer/releases/latest);
+the release notes explain the one-time security prompt for manual downloads.
 
 ## Install from source
 

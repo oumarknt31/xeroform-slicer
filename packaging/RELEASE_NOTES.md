@@ -1,6 +1,23 @@
 XeroForm Slicer - the open-source SLS slicer for the XeroForm printer.
 
-## Download
+## Install - one line, no security prompts (recommended)
+
+**Mac** - open **Terminal** (⌘-Space, type Terminal) and paste:
+```
+curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-mac.sh | sh
+```
+**Windows** - open **PowerShell** (Start menu, type PowerShell) and paste:
+```
+irm https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-windows.ps1 | iex
+```
+**Linux** - in a terminal:
+```
+curl -fsSL https://raw.githubusercontent.com/oumarknt31/xeroform-slicer/main/install/install-linux.sh | sh
+```
+It picks the right version for your computer, installs it (Applications on Mac, Start menu on
+Windows, app menu on Linux) and opens XeroForm. Run the same line again to update.
+
+## Or download manually
 
 | Your computer | File |
 |---|---|
@@ -9,30 +26,13 @@ XeroForm Slicer - the open-source SLS slicer for the XeroForm printer.
 | Windows 10 / 11 | `XeroForm-…-Windows.zip` |
 | Linux (x86-64) | `XeroForm-…-Linux.tar.gz` |
 
-Not sure which Mac you have? Apple menu ▸ About This Mac: "Chip" means Apple Silicon, "Processor" means Intel.
+The app isn't code-signed yet, so a manual download shows a security warning the first time:
 
-## Install
-
-The app isn't code-signed yet, so the first launch shows a security warning. That's expected.
-
-**Mac**
-1. Unzip and drag **XeroForm** into **Applications**.
-2. Double-click it. macOS says *"Apple could not verify XeroForm is free of malware…"* - click **Done**.
-   (This appears because the app isn't signed with a paid Apple developer certificate yet; the app itself is fine.)
-3. Open **System Settings ▸ Privacy & Security**, scroll down to *"XeroForm" was blocked…* and click **Open Anyway**,
-   then confirm. XeroForm opens, and macOS won't ask again.
-
-   Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/XeroForm.app`
-
-   On macOS 14 and older you can instead right-click XeroForm ▸ **Open** ▸ **Open**.
-
-**Windows**
-1. Unzip the folder anywhere (for example Documents).
-2. Run **XeroForm.exe** inside it. If "Windows protected your PC" appears: **More info** ▸ **Run anyway**.
-
-**Linux**
-1. `tar xzf XeroForm-…-Linux.tar.gz`
-2. Run `XeroForm/XeroForm`.
+- **Mac**: double-click, click **Done**, then System Settings ▸ Privacy & Security ▸ **Open Anyway**.
+  (macOS 14 and older: right-click ▸ **Open** ▸ **Open**.)
+- **Windows**: run **XeroForm.exe** from the unzipped folder; at "Windows protected your PC" click
+  **More info** ▸ **Run anyway**.
+- **Linux**: `tar xzf XeroForm-…-Linux.tar.gz` and run `XeroForm/XeroForm`.
 
 ## Using it
 
