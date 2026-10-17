@@ -38,14 +38,27 @@ automatically as a dependency).
 Desktop app:
 
 ```bash
-slicerkit-gui                 # or: slicerkit-gui part.stl other.stl
+slicerkit-gui                 # or: slicerkit-gui part.stl other.stl  |  slicerkit-gui job.slicerkit
 ```
 
-Add models (with a copy count each), adjust the settings, press **Slice**, then
-step through the layers - outlines, hatches, travel moves and scan order, with
-zoom and pan. The report shows repairs, warnings, the packing result and the
-time estimate. *File > Save .cli* writes the result; nothing is written until
-then. Slicing runs in the background and can be cancelled.
+- **Parts**: add models (or drop them on the window), set copies per model. A
+  warning icon marks a model with repairs or a likely units problem - hover it.
+- **Settings**: every setting has a tooltip; *Reset to defaults* restores them.
+  The build volume starts as a 150 mm placeholder until the machine is known.
+- **Slice** (⌘R) runs in the background - the window stays usable and the job
+  can be cancelled. Models load in the background too.
+- **Layers** tab: step through layers (←/→, PgUp/PgDn ±10, Home/End), toggle
+  outlines, hatches, travel moves, scan order and the mm grid; the cursor
+  position shows in mm. **Build layout** tab: every packed part from above,
+  with its name and height range (hover for details).
+- **Out of date**: change a part or setting after slicing and a banner says so;
+  exporting is blocked until you slice again.
+- **Projects** (`.slicerkit`, JSON): save/open the parts list and every
+  setting; model paths are stored relative to the project file. Open Recent,
+  and a prompt before unsaved changes are lost.
+- **Export** (⌘E) writes the `.cli`; nothing is written until then.
+- The window remembers its size, last folder and last settings. Unexpected
+  errors show their details and go to a log file (*Help ▸ Show Log File*).
 
 Command line:
 
@@ -159,7 +172,8 @@ src/slicerkit/
     cli_ascii.py # ASCII .cli writer
   pipeline.py    # orchestrates the stages
   summary.py     # the text report shared by CLI and GUI
-  gui/           # PySide6 desktop app (window.py, layer_view.py)
+  project.py     # .slicerkit project files (parts + settings, JSON)
+  gui/           # PySide6 desktop app: window, panels, views, background tasks
   preview.py     # interactive HTML layer viewer
   __main__.py    # CLI entry point
 tests/           # round-trip export, slicing correctness
@@ -179,7 +193,8 @@ examples/        # sample_cube.py
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [x] 3D nesting: several parts / copies packed into one build (bounding boxes)
-- [x] PySide6 desktop GUI: parts + copies, settings, background slicing, layer view, save
+- [x] PySide6 desktop GUI: projects, background loading/slicing, layer + build-layout views
+- [ ] packaged app (.app / .exe) for people without Python
 
 > The ASCII `.cli` output is structurally valid and self-consistent, and the
 > POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and

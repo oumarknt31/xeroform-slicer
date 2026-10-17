@@ -29,6 +29,7 @@ class Placement:
     item: int                              # index into the list of parts
     position: tuple[float, float, float]   # min corner of the part's box (build coords, mm)
     rotated: bool                          # turned 90 degrees about Z
+    size: tuple[float, float, float] = (0.0, 0.0, 0.0)  # box size as placed (x, y, z), mm
 
 
 def pack_boxes(sizes, volume, spacing: float = 3.0, allow_rotation: bool = True,
@@ -83,7 +84,8 @@ def pack_boxes(sizes, volume, spacing: float = 3.0, allow_rotation: bool = True,
         x0, y0, z0, x1, y1, z1 = box
         points = [p for p in points if p != (x0, y0, z0)]
         points += [(x1, y0, z0), (x0, y1, z0), (x0, y0, z1)]
-        placements[i] = Placement(i, (x0 + s - X / 2, y0 + s - Y / 2, z0), rotated)
+        placed = (sy, sx, sz) if rotated else (sx, sy, sz)
+        placements[i] = Placement(i, (x0 + s - X / 2, y0 + s - Y / 2, z0), rotated, placed)
     if left_out:
         counts: dict[str, int] = {}
         for i in left_out:
@@ -130,8 +132,8 @@ def _centre(placements: list[Placement], sizes) -> list[Placement]:
     lo = np.min([p.position[:2] for p in placements], axis=0)
     hi = np.max([np.add(p.position[:2], _footprint(p, sizes[p.item])) for p in placements], axis=0)
     dx, dy = -(lo + hi) / 2
-    return [Placement(p.item, (p.position[0] + dx, p.position[1] + dy, p.position[2]), p.rotated)
-            for p in placements]
+    return [Placement(p.item, (p.position[0] + dx, p.position[1] + dy, p.position[2]), p.rotated,
+                      p.size) for p in placements]
 
 
 def arrange(meshes: list[trimesh.Trimesh], volume, spacing: float = 3.0,
