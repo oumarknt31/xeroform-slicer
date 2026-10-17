@@ -1,5 +1,9 @@
 # XeroForm Slicer
 
+[![Tests](https://github.com/oumarknt31/xeroform-slicer/actions/workflows/tests.yml/badge.svg)](https://github.com/oumarknt31/xeroform-slicer/actions/workflows/tests.yml)
+[![Latest release](https://img.shields.io/github/v/release/oumarknt31/xeroform-slicer)](https://github.com/oumarknt31/xeroform-slicer/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 XeroForm Slicer is the open-source slicer for the XeroForm low-cost SLS
 (selective laser sintering) 3D printer. It turns 3D models (STL, OBJ, PLY or
 3MF) into laser tool-paths and writes them to a machine file:
@@ -11,6 +15,8 @@ load model  ->  slice into layers  ->  hatch (outlines + laser fill)  ->  export
 It comes as a desktop app for macOS, Windows and Linux, a command-line tool and
 a Python library, built on the open-source [PySLM](https://pyslm.readthedocs.io)
 slicing library.
+
+![XeroForm slicing a batch of nine parts, one layer shown from above](docs/images/xeroform-layers.png)
 
 ## Install the app
 
@@ -56,8 +62,7 @@ Start it from Applications, the Start menu or your app menu, or run
 - **Out of date**: if you change a part or setting after slicing, a banner says
   so and exporting stays blocked until you slice again.
 - **Projects** (`.xeroform`, JSON): save the parts list and every setting. Model
-  paths are stored relative to the project file. Older `.slicerkit` projects
-  still open.
+  paths are stored relative to the project file.
 - **Export** (⌘E / Ctrl+E) writes the `.cli` file. Nothing is written before
   that.
 - **Look**: dark graphite with a laser-orange accent, or a soft-grey light mode.
@@ -65,6 +70,8 @@ Start it from Applications, the Start menu or your app menu, or run
 
 The window remembers its size, theme, last folder and last settings. Unexpected
 errors show their details and go to a log file (*Help ▸ Show Log File*).
+
+![The same build in the 3D view, with the selected layer as an orange cut](docs/images/xeroform-3d.png)
 
 ## Use the command line
 
@@ -88,7 +95,7 @@ xeroform model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
     --contour-power 4 --contour-speed 400 --jump-speed 2000
 ```
 
-Run `xeroform --help` for every option. `python -m slicerkit` works too.
+Run `xeroform --help` for every option and `xeroform --version` for the version. `python -m xeroform` works too.
 
 ### Model checks
 
@@ -148,7 +155,7 @@ each exporter; standard ASCII CLI has no field for them.
 The same pipeline is available as a library:
 
 ```python
-from slicerkit import SliceConfig, slice_file, write_preview
+from xeroform import SliceConfig, slice_file, write_preview
 
 layers = slice_file("model.stl", "model.cli",
                     SliceConfig(layer_thickness=0.1, hatch_distance=0.2))
@@ -168,7 +175,7 @@ write_preview(layers, "model.html")
   new file in `export/`.
 
 ```text
-src/slicerkit/
+src/xeroform/
   part.py         load, repair, check and place a mesh
   slicing.py      part -> layers (the only PySLM -> XeroForm translation)
   hatching.py     hatch and contour settings
@@ -187,9 +194,10 @@ src/slicerkit/
     assets/       XeroForm logo as SVG
 tests/            unit, pipeline and headless GUI tests
 tools/            build_logo.py (logo SVGs), make_icons.py (app icons)
+docs/             README screenshots and the original logo artwork
 packaging/        PyInstaller recipe and release notes
 install/          one-line installers
-.github/          tests, release builds, installer tests, Dependabot
+.github/          tests, release builds, installer tests, Dependabot, issue template
 ```
 
 ## Development
@@ -206,11 +214,11 @@ ruff check src tests tools
 The package that provides `import pyslm` on PyPI is **PythonSLM**; it installs
 automatically.
 
-To publish a release, set `__version__` in `src/slicerkit/__init__.py`, add an
+To publish a release, set `__version__` in `src/xeroform/__init__.py`, add an
 entry to [CHANGELOG.md](CHANGELOG.md), then push a tag:
 
 ```bash
-git tag v0.1.1 && git push origin v0.1.1
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 GitHub Actions builds the app for macOS (Apple Silicon and Intel), Windows and
@@ -237,6 +245,10 @@ Open:
 
 `trimesh` is capped below version 6 because PySLM 0.6 calls `Path.to_planar`,
 which trimesh has deprecated.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability privately.
 
 ## License
 

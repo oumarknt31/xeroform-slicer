@@ -32,7 +32,7 @@ class SliceConfig:
     jump_speed: float = 2000.0        # mm/s, laser-off moves between vectors
 
     # export
-    export_format: str = "cli"        # key in slicerkit.export.EXPORTERS
+    export_format: str = "cli"        # key in xeroform.export.EXPORTERS
     units: float = 1.0                # mm per coordinate unit (confirm w/ firmware)
 
     def __post_init__(self):

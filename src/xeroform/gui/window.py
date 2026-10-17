@@ -29,7 +29,7 @@ from .tasks import Task, collect_garbage_on_gui_thread
 from .widgets import Toast, shadow
 from .window_ui import WindowLayoutMixin
 
-log = logging.getLogger("slicerkit.gui")
+log = logging.getLogger("xeroform.gui")
 
 __all__ = ["APP_NAME", "MainWindow"]
 
@@ -132,7 +132,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
         self.setWindowTitle(f"{name}[*] — {APP_NAME}")
         self.setWindowModified(self.dirty)
         self.title_label.setText(name)
-        self.subtitle_label.setText(os.path.dirname(self.project_path) if self.project_path else "not saved yet")
+        folder = os.path.basename(os.path.dirname(self.project_path)) if self.project_path else ""
+        self.subtitle_label.setText(f"in {folder}" if folder else "not saved yet")
         self.subtitle_label.setToolTip(self.project_path or "")
         self.dirty_dot.setVisible(self.dirty)
         busy, slicing = self.busy(), self.slicing is not None and self.slicing.isRunning()

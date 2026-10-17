@@ -3,13 +3,25 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "slicerkit"
-dynamic = ["version"]               # from slicerkit.__version__
+name = "xeroform"
+dynamic = ["version"]   # from xeroform.__version__
 description = "XeroForm Slicer: open-source SLS slicing (3D models -> laser tool-paths) for the XeroForm printer"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Oumar Kante" }]
 license = "MIT"
+keywords = ["SLS", "selective laser sintering", "3D printing", "slicer", "additive manufacturing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
     "PythonSLM>=0.6",
@@ -19,26 +31,30 @@ dependencies = [
     "lxml>=4.9",          # trimesh needs it to read .3mf
 ]
 
+[project.urls]
+Homepage = "https://github.com/oumarknt31/xeroform-slicer"
+Download = "https://github.com/oumarknt31/xeroform-slicer/releases/latest"
+Issues = "https://github.com/oumarknt31/xeroform-slicer/issues"
+Changelog = "https://github.com/oumarknt31/xeroform-slicer/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.6"]
 gui = ["PySide6-Essentials>=6.5"]
 
 [project.scripts]
-xeroform = "slicerkit.__main__:main"
-slicerkit = "slicerkit.__main__:main"          # old name, kept working
+xeroform = "xeroform.__main__:main"
 
 [project.gui-scripts]
-xeroform-gui = "slicerkit.gui:main"
-slicerkit-gui = "slicerkit.gui:main"           # old name, kept working
+xeroform-gui = "xeroform.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.dynamic]
-version = { attr = "slicerkit.__version__" }
+version = { attr = "xeroform.__version__" }
 
 [tool.setuptools.package-data]
-"slicerkit.gui" = ["assets/*.svg"]
+"xeroform.gui" = ["assets/*.svg"]
 
 [tool.ruff]
 line-length = 120

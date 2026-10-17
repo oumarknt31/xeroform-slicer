@@ -3,12 +3,12 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig
-from slicerkit.__main__ import main
-from slicerkit.hatching import HatchSettings
-from slicerkit.part import MeshError, Part
-from slicerkit.pipeline import slice_job
-from slicerkit.slicing import slice_part
+from xeroform import SliceConfig
+from xeroform.__main__ import main
+from xeroform.hatching import HatchSettings
+from xeroform.part import MeshError, Part
+from xeroform.pipeline import slice_job
+from xeroform.slicing import slice_part
 
 
 def _save(tmp_path, mesh, name="m.stl"):
@@ -60,7 +60,7 @@ def test_big_hole_is_refused(tmp_path):
 
 
 def test_sliver_triangle_that_closes_the_surface_is_kept(tmp_path):
-    """A zero-area triangle can be what closes a surface (3DBenchy has 563 of them).
+    """A zero-area triangle that closes a seam must survive the clean-up.
 
     10 mm cube whose front face has an extra vertex M in the middle of its top
     edge; a zero-area sliver (A, M, B) closes the seam against the top face.

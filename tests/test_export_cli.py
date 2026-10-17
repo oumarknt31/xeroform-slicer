@@ -2,8 +2,8 @@
 import numpy as np
 import trimesh
 
-from slicerkit.pipeline import slice_file
-from slicerkit.config import SliceConfig
+from xeroform.pipeline import slice_file
+from xeroform.config import SliceConfig
 
 
 def _read_first_layer(cli_path):

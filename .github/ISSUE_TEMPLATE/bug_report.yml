@@ -1,0 +1,39 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add model ...
+        2. Set layer thickness to ...
+        3. Click Slice
+  - type: input
+    id: version
+    attributes:
+      label: XeroForm version
+      description: Help ▸ About, or `xeroform --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS (Apple Silicon), macOS (Intel), Windows, Linux, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log or error message
+      description: Help ▸ Show Log File, or the error text. Attach the model if you can share it.
+      render: text

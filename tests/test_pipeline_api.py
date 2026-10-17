@@ -2,8 +2,8 @@
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig
-from slicerkit.pipeline import export, slice_build, slice_job
+from xeroform import SliceConfig
+from xeroform.pipeline import export, slice_build, slice_job
 
 
 @pytest.fixture

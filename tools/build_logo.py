@@ -1,10 +1,10 @@
 """Build the XeroForm logo as SVG from its geometry.
 
-The mark is a faithful vector redraw of the XeroForm logo (a cluster of seven
-hexagons, three linked chains, side wings and a zig-zag base). It is rebuilt
-from measured shapes rather than traced, so it stays crisp at any size.
+The mark is a cluster of seven hexagons with three linked chains, two side wings
+and a zig-zag base. It is defined here as exact shapes, so it stays crisp at any
+size. Coordinates are in design units on a 112 x 110 tile.
 
-    python tools/build_logo.py      # writes src/slicerkit/gui/assets/*.svg
+    python tools/build_logo.py      # writes src/xeroform/gui/assets/*.svg
 
 Writes:
   xeroform-icon.svg  white mark on the black rounded tile (app icon)
@@ -17,7 +17,7 @@ from shapely import affinity
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import unary_union
 
-ASSETS = os.path.join(os.path.dirname(__file__), os.pardir, "src", "slicerkit", "gui", "assets")
+ASSETS = os.path.join(os.path.dirname(__file__), os.pardir, "src", "xeroform", "gui", "assets")
 
 
 def hex_pointy(cx, cy, R):
@@ -59,7 +59,7 @@ zig = [(28.6, 73.6), (43, 81.6), (48.6, 78.4), (53.6, 81.2), (53.6, 84.6), (CX, 
 zig = zig + [(2 * CX - x, y) for x, y in reversed(zig[:-1])]
 ext = [(zig[0][0] - 4, zig[0][1] - 2.2)] + zig + [(2 * CX - zig[0][0] + 4, zig[0][1] - 2.2)]
 band = LineString(ext).buffer(2.3, cap_style=2, join_style=2, mitre_limit=3).intersection(
-    box(28.6, 0, 2 * CX - 28.6, 200))  # ends cut straight down, like the original
+    box(28.6, 0, 2 * CX - 28.6, 200))  # ends cut square
 # the body ends just above the band, following the zig-zag (the black line is the gap)
 edge = [(x, y - 2.3 - 2.2 * GAP) for x, y in ext]
 body = body.intersection(Polygon([(0, 0), (200, 0), (200, edge[-1][1])] + edge[::-1] + [(0, edge[0][1])]))

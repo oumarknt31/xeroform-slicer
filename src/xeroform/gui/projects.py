@@ -15,7 +15,7 @@ from .constants import MAX_RECENT, MODEL_EXTENSIONS, PROJECT_EXTENSIONS, PROJECT
 from .panels import gui_defaults
 from .tasks import Task
 
-log = logging.getLogger("slicerkit.gui")
+log = logging.getLogger("xeroform.gui")
 
 
 class ProjectsMixin:

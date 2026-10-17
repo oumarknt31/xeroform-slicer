@@ -12,7 +12,7 @@ from PySide6.QtGui import QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
-SVG = os.path.join(ROOT, "src", "slicerkit", "gui", "assets", "xeroform-icon.svg")
+SVG = os.path.join(ROOT, "src", "xeroform", "gui", "assets", "xeroform-icon.svg")
 OUT = os.path.join(ROOT, "packaging")
 
 

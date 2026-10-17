@@ -77,5 +77,5 @@ jobs:
           sh install/install-linux.sh
           sh install/install-linux.sh   # running it again updates in place
           grep -q '^Exec="' "$HOME/.local/share/applications/xeroform.desktop"
-          test -f "$(sed -n 's/^Icon=//p' "$HOME/.local/share/applications/xeroform.desktop")"
+          test -f "$HOME/.local/share/icons/hicolor/scalable/apps/xeroform.svg"
           "$HOME/.local/bin/xeroform-gui" --smoke-test

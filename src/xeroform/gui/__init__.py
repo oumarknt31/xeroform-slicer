@@ -1,6 +1,6 @@
 """XeroForm desktop app (PySide6). Install with:  pip install -e ".[gui]"
 
-Run:  xeroform-gui [model.stl | project.xeroform ...]   or   python -m slicerkit.gui
+Run:  xeroform-gui [model.stl | project.xeroform ...]   or   python -m xeroform.gui
       xeroform-gui --smoke-test   checks a build works (slice, export, open the window)
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ import os
 import sys
 import traceback
 
-log = logging.getLogger("slicerkit.gui")
+log = logging.getLogger("xeroform.gui")
 
 
 def _setup_logging() -> str:
@@ -21,7 +21,7 @@ def _setup_logging() -> str:
     path = os.path.join(folder, "xeroform.log")
     handler = logging.FileHandler(path, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-    root = logging.getLogger("slicerkit")
+    root = logging.getLogger("xeroform")
     root.addHandler(handler)
     root.setLevel(logging.INFO)
     return path
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .. import __version__
-    from ..project import EXTENSION, LEGACY_EXTENSIONS
+    from ..project import EXTENSION
     from .constants import APP_NAME
     from .window import MainWindow
 
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.excepthook = excepthook
     files = [os.path.abspath(a) for a in argv[1:]]
-    projects = [f for f in files if f.endswith((EXTENSION, *LEGACY_EXTENSIONS))]
+    projects = [f for f in files if f.endswith(EXTENSION)]
     if projects:
         window.open_project(projects[0])
     elif files:

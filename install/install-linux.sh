@@ -61,15 +61,18 @@ fi
 mv "$staged/XeroForm" "$app"
 rm -rf "$staged" "$app.old"
 
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+icons="$HOME/.local/share/icons/hicolor/scalable/apps"
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$icons"
 ln -sf "$app/XeroForm" "$HOME/.local/bin/xeroform-gui"
+icon=$(find "$app" -name xeroform-icon.svg -print | head -n 1)
+[ -n "$icon" ] && cp "$icon" "$icons/xeroform.svg"
 cat > "$HOME/.local/share/applications/xeroform.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=XeroForm
 Comment=SLS slicer for the XeroForm printer
 Exec="$app/XeroForm" %F
-Icon=$app/_internal/slicerkit/gui/assets/xeroform-icon.svg
+Icon=xeroform
 Terminal=false
 Categories=Graphics;Engineering;
 MimeType=model/stl;model/obj;model/3mf;

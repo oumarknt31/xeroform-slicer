@@ -3,10 +3,10 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig, slice_file
-from slicerkit.__main__ import main
-from slicerkit.laser import LaserSettings, estimate_scan_time, layer_scan_time, path_lengths
-from slicerkit.layers import Contour, Hatch, Layer, ScanParams
+from xeroform import SliceConfig, slice_file
+from xeroform.__main__ import main
+from xeroform.laser import LaserSettings, estimate_scan_time, layer_scan_time, path_lengths
+from xeroform.layers import Contour, Hatch, Layer, ScanParams
 
 
 def _square_layer(contour_params=None, hatch_params=None):

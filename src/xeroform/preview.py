@@ -2,7 +2,7 @@
 
 Open the file in any browser to step through layers and check outlines, hatch
 fill, scan order and laser-off travel moves - no printer or extra software
-needed. Like the exporters, this only reads slicerkit's own Layer model.
+needed. Like the exporters, this only reads XeroForm's own Layer model.
 """
 from __future__ import annotations
 import html

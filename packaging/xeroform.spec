@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, os.pardir))
 sys.path.insert(0, os.path.join(ROOT, "src"))
-from slicerkit import __version__  # noqa: E402
+from xeroform import __version__  # noqa: E402
 
 hidden = (
     [m for m in collect_submodules("pyslm") if "visualise" not in m]  # plotting needs matplotlib
@@ -19,7 +19,7 @@ hidden = (
     + collect_submodules("pyclipr")
 )
 datas = (
-    [(os.path.join(ROOT, "src", "slicerkit", "gui", "assets", "*.svg"), os.path.join("slicerkit", "gui", "assets")),
+    [(os.path.join(ROOT, "src", "xeroform", "gui", "assets", "*.svg"), os.path.join("xeroform", "gui", "assets")),
      (os.path.join(ROOT, "LICENSE"), "."),
      (os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"), ".")]
     + collect_data_files("trimesh")
@@ -63,7 +63,7 @@ if sys.platform == "darwin":
             "LSMinimumSystemVersion": "11.0",
             "CFBundleDocumentTypes": [{
                 "CFBundleTypeName": "XeroForm project",
-                "CFBundleTypeExtensions": ["xeroform", "slicerkit"],
+                "CFBundleTypeExtensions": ["xeroform"],
                 "CFBundleTypeRole": "Editor",
             }],
         },

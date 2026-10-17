@@ -2,7 +2,7 @@
 
 PySLM returns hatch vectors line by line, all pointing the same way, so after
 every vector the laser jumps back across the part with the beam off. Re-ordering
-happens here, on slicerkit's own model, so it doesn't depend on PySLM.
+happens here, on XeroForm's own model, so it doesn't depend on PySLM.
 
   nearest : always continue with the closest unscanned vector end. The default:
             on real parts it gave the least laser-off travel, especially with

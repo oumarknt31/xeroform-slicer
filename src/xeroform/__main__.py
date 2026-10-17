@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 
+from . import __version__
 from .pipeline import slice_build, slice_job
 from .nesting import NestingError
 from .part import MeshError
@@ -18,6 +19,7 @@ def main(argv=None) -> int:
         prog="xeroform",
         description="XeroForm SLS slicer: turn 3D models into laser tool-paths (.cli).",
     )
+    ap.add_argument("--version", action="version", version=f"XeroForm {__version__}")
     ap.add_argument("inputs", nargs="+", metavar="input",
                     help="model file(s) (.stl, .obj, .3mf, ...); several are packed into one build")
     ap.add_argument("-o", "--output", required=True, help="output file (.cli)")

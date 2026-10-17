@@ -10,8 +10,8 @@ from PySide6.QtCore import QEventLoop, QMimeData, QPointF, QSettings, Qt, QTimer
 from PySide6.QtGui import QDropEvent  # noqa: E402
 from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
-from slicerkit.gui.panels import gui_defaults  # noqa: E402
-from slicerkit.gui.window import MainWindow  # noqa: E402
+from xeroform.gui.panels import gui_defaults  # noqa: E402
+from xeroform.gui.window import MainWindow  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -19,8 +19,8 @@ def app(tmp_path_factory):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     QSettings.setDefaultFormat(QSettings.IniFormat)
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path_factory.mktemp("settings")))
-    app.setOrganizationName("slicerkit-tests")
-    app.setApplicationName("slicerkit-tests")
+    app.setOrganizationName("xeroform-tests")
+    app.setApplicationName("xeroform-tests")
     return app
 
 
@@ -150,7 +150,7 @@ def test_project_save_and_open(window, models, tmp_path, monkeypatch):
 
 
 def test_open_project_with_missing_model(window, models, tmp_path):
-    from slicerkit.project import Project, ProjectPart
+    from xeroform.project import Project, ProjectPart
     path = str(tmp_path / "p.xeroform")
     Project([ProjectPart(models[0]), ProjectPart(str(tmp_path / "gone.stl"))]).save(path)
     wait(window.open_project(path))
@@ -202,7 +202,7 @@ def test_error_is_shown(window, models):
 
 
 def test_unexpected_error_shows_details(window, models, monkeypatch):
-    import slicerkit.gui.window as win
+    import xeroform.gui.window as win
     monkeypatch.setattr(win, "slice_job", lambda *a, **k: 1 / 0)
     shown = []
     monkeypatch.setattr(QMessageBox, "exec", lambda self: shown.append(self.detailedText()))
@@ -215,7 +215,7 @@ def test_unexpected_error_shows_details(window, models, monkeypatch):
 # --- look & feel, new views ---------------------------------------------------
 
 def test_theme_switching(window):
-    from slicerkit.gui import theme
+    from xeroform.gui import theme
     assert theme.mode() == "dark"  # XeroForm is dark-first
     window.set_theme("light")
     assert theme.current()["bg"] == theme.LIGHT["bg"] and QSettings().value("theme") == "light"
@@ -296,7 +296,7 @@ def test_flipbook(window, models):
 
 
 def test_toast(window):
-    from slicerkit.gui.widgets import Toast
+    from xeroform.gui.widgets import Toast
     window.toast("Hello")
     toasts = window.centralWidget().findChildren(Toast)
     assert toasts and not toasts[-1].isHidden()  # (test windows are never on screen)
@@ -304,7 +304,7 @@ def test_toast(window):
 
 def test_theme_images_live_in_a_private_folder(app):
     import stat
-    from slicerkit.gui import theme
+    from xeroform.gui import theme
     path = theme._icon_file("check-mark", "#ffffff")
     folder = os.path.dirname(path)
     assert os.path.isfile(path) and os.path.normpath(folder) == os.path.normpath(theme._private_dir())
@@ -317,7 +317,7 @@ def test_theme_images_live_in_a_private_folder(app):
 def test_garbage_is_collected_on_the_gui_thread_only(window):
     """The cycle collector must never free Qt objects on a worker thread (it crashes)."""
     import gc
-    from slicerkit.gui.tasks import _MainThreadGC
+    from xeroform.gui.tasks import _MainThreadGC
     app = QtWidgets.QApplication.instance()
     assert not gc.isenabled() and len(app.findChildren(_MainThreadGC)) == 1
     MainWindow().deleteLater()  # a second window doesn't install a second collector

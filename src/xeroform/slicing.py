@@ -1,6 +1,6 @@
-"""The slicer: turn a Part into a list of slicerkit Layers.
+"""The slicer: turn a Part into a list of XeroForm Layers.
 
-This module is the ONLY place PySLM geometry is translated into slicerkit's own
+This module is the ONLY place PySLM geometry is translated into XeroForm's own
 data model. Keeping the translation here is what makes the rest of the engine
 independent of PySLM.
 """
@@ -18,7 +18,7 @@ from .scan_order import order_segments
 def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
                laser: LaserSettings | None = None,
                progress: Callable[[int, int], None] | None = None) -> list[Layer]:
-    """Slice the whole part, bottom to top, returning slicerkit Layers.
+    """Slice the whole part, bottom to top, returning XeroForm Layers.
 
     With `laser`, every contour and hatch carries its scan parameters. Empty
     layers between parts (e.g. the gap between stacked parts in a packed build)
@@ -52,7 +52,7 @@ def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
 
 
 def _to_layer(pyslm_layer, z: float, laser: LaserSettings | None = None) -> Layer:
-    """Translate one PySLM layer into a slicerkit Layer (the wrapper boundary)."""
+    """Translate one PySLM layer into a XeroForm Layer (the wrapper boundary)."""
     contour_coords: list[np.ndarray] = []
     hatches: list[Hatch] = []
     for g in pyslm_layer.geometry:
@@ -79,7 +79,7 @@ def _order_hatches(layer: Layer, mode: str) -> None:
 
 def _orient_contours(contour_coords: list[np.ndarray],
                      params: ScanParams | None = None) -> list[Contour]:
-    """Re-orient PySLM contours to slicerkit's convention (outer CCW, holes CW).
+    """Re-orient PySLM contours to XeroForm's convention (outer CCW, holes CW).
 
     PySLM's offsetting gives outers and holes opposite windings, but which one is
     clockwise is a PySLM detail (currently outers are CW). The largest contour in

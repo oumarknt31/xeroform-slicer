@@ -1,7 +1,6 @@
 """Project files: which models to print (and how many copies) plus every setting.
 
-Saved as JSON with the extension .xeroform (older .slicerkit files still open).
-Model paths are stored relative to the project file, so a project folder can be
+Saved as JSON with the extension .xeroform. Model paths are stored relative to the project file, so a project folder can be
 moved or shared as a whole.
 """
 from __future__ import annotations
@@ -12,9 +11,7 @@ from dataclasses import asdict, dataclass, field, fields
 from .config import SliceConfig
 
 EXTENSION = ".xeroform"
-LEGACY_EXTENSIONS = (".slicerkit",)        # projects saved before the XeroForm name
 FORMAT = "xeroform-project"
-LEGACY_FORMATS = ("slicerkit-project",)
 VERSION = 1
 
 
@@ -55,7 +52,7 @@ class Project:
             raise ProjectError(f"Could not open {path}: {e.strerror or e}") from e
         except json.JSONDecodeError as e:
             raise ProjectError(f"{path} is not a valid project file (line {e.lineno}).") from e
-        if not isinstance(data, dict) or data.get("format") not in (FORMAT, *LEGACY_FORMATS):
+        if not isinstance(data, dict) or data.get("format") != FORMAT:
             raise ProjectError(f"{path} is not a XeroForm project file.")
         if data.get("version", 0) > VERSION:
             raise ProjectError(f"{path} was saved by a newer XeroForm; please update.")

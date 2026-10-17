@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 (2026-10-17)
+
+- The Python package is now `xeroform` (`import xeroform`, `python -m xeroform`).
+  The `slicerkit` commands and `.slicerkit` project files are no longer
+  supported; re-save old projects as `.xeroform`.
+- The header shows the project's folder name instead of its full path.
+- The Linux installer registers the app icon with the desktop.
+- Screenshots in the README, security policy and bug report template.
+
 ## 0.1.1 (2026-10-17)
 
 - The one-line installers wait for you to quit a running XeroForm before

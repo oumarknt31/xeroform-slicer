@@ -147,9 +147,8 @@ def repair_mesh(mesh: trimesh.Trimesh) -> list[str]:
     repairs = []
     mesh.merge_vertices()
 
-    # Zero-area and duplicate triangles are usually junk, but in some files they
-    # are what closes the surface (3DBenchy has 563): only drop them if that
-    # doesn't open a gap.
+    # Zero-area and duplicate triangles are usually junk, but some exporters rely
+    # on them to close seams, so drop them only if that doesn't open a gap.
     keep = mesh.nondegenerate_faces() & mesh.unique_faces()
     if not keep.all():
         cleaned = mesh.copy()

@@ -1,4 +1,4 @@
-"""slicerkit's own layer data model.
+"""XeroForm's own layer data model.
 
 This is the wrapper boundary: PySLM produces its own geometry objects, and we
 translate them into these plain, well-named structures exactly once (in

@@ -5,11 +5,11 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig
-from slicerkit.__main__ import main
-from slicerkit.nesting import NestingError, arrange, pack_boxes
-from slicerkit.part import MeshError
-from slicerkit.pipeline import slice_build
+from xeroform import SliceConfig
+from xeroform.__main__ import main
+from xeroform.nesting import NestingError, arrange, pack_boxes
+from xeroform.part import MeshError
+from xeroform.pipeline import slice_build
 
 
 def _boxes(placements, sizes):

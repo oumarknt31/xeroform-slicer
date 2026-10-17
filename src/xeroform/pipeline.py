@@ -119,7 +119,7 @@ def _slice_and_export(part: Part, config: SliceConfig, exporter, output_path: st
 
 
 def slice_file(input_path: str, output_path: str, config: SliceConfig | None = None) -> list[Layer]:
-    """Slice `input_path` (STL) and write laser tool-paths to `output_path`.
+    """Slice the model at `input_path` and write laser tool-paths to `output_path`.
 
     Returns the list of Layer objects (useful for tests / previews). Use
     `slice_job` to also get the model report (repairs, warnings).

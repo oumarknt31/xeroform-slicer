@@ -3,12 +3,12 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit.config import SliceConfig, get_profile, PROFILES
-from slicerkit.hatching import HatchSettings
-from slicerkit.layers import signed_area
-from slicerkit.part import Part
-from slicerkit.pipeline import slice_file
-from slicerkit.slicing import slice_part
+from xeroform.config import SliceConfig, get_profile, PROFILES
+from xeroform.hatching import HatchSettings
+from xeroform.layers import signed_area
+from xeroform.part import Part
+from xeroform.pipeline import slice_file
+from xeroform.slicing import slice_part
 
 
 @pytest.fixture(scope="module")

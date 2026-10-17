@@ -2,13 +2,13 @@
 import importlib.metadata
 import pathlib
 
-import slicerkit
+import xeroform
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_version_has_one_source():
-    assert importlib.metadata.version("slicerkit") == slicerkit.__version__
+    assert importlib.metadata.version("xeroform") == xeroform.__version__
 
 
 def test_license_files():
@@ -18,4 +18,4 @@ def test_license_files():
 
 
 def test_changelog_has_this_version():
-    assert f"## {slicerkit.__version__} " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## {xeroform.__version__} " in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

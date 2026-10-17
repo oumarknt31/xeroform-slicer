@@ -1,10 +1,8 @@
 """Look and feel: colour tokens, the app style sheet, line icons and the XeroForm logo.
 
-XeroForm is dark-first: graphite surfaces with one laser-orange accent, depth
-from gentle gradients and highlight edges, and orange glows on the things that
-matter (the Slice button, the layer slider, laser paths). The light mode uses
-soft greys - nothing is pure white. Everything visual reads its colours from
-`current()`, so switching theme is one call to `apply()`.
+Two themes: dark graphite (the default) and a light theme in soft greys, both
+with a single orange accent. Widgets and views read their colours from
+`current()`; `apply()` switches theme for the whole app.
 """
 from __future__ import annotations
 import atexit
@@ -255,7 +253,7 @@ QMessageBox {{ background: {surface}; }}
 
 
 # --- icons ---------------------------------------------------------------------
-# 24 x 24 line icons, stroke 2 (fills marked fill=). Drawn for slicerkit.
+# 24 x 24 line icons, stroke 2 (fills marked fill=). Drawn for XeroForm.
 
 _ICONS = {
     "open": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',

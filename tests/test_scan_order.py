@@ -3,12 +3,12 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig, slice_file
-from slicerkit.__main__ import main
-from slicerkit.hatching import HatchSettings
-from slicerkit.laser import path_lengths
-from slicerkit.layers import Hatch, Layer
-from slicerkit.scan_order import order_segments
+from xeroform import SliceConfig, slice_file
+from xeroform.__main__ import main
+from xeroform.hatching import HatchSettings
+from xeroform.laser import path_lengths
+from xeroform.layers import Hatch, Layer
+from xeroform.scan_order import order_segments
 
 
 def _raster(lines=5, length=10.0, spacing=1.0):

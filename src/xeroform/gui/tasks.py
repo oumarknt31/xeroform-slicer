@@ -16,7 +16,7 @@ from ..nesting import NestingError
 from ..part import MeshError
 from ..project import ProjectError
 
-log = logging.getLogger("slicerkit.gui")
+log = logging.getLogger("xeroform.gui")
 
 EXPECTED = (MeshError, NestingError, ProjectError, ValueError)
 

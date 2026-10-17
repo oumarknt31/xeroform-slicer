@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig, estimate_scan_time, slice_file, write_preview
-from slicerkit.__main__ import main
-from slicerkit.layers import Layer
-from slicerkit.preview import preview_data
+from xeroform import SliceConfig, estimate_scan_time, slice_file, write_preview
+from xeroform.__main__ import main
+from xeroform.layers import Layer
+from xeroform.preview import preview_data
 
 
 @pytest.fixture(scope="module")

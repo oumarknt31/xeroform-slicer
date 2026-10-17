@@ -1,7 +1,7 @@
 """Minimal example: make a cube, slice it, write a .cli file."""
 import trimesh
 
-from slicerkit import slice_file, SliceConfig
+from xeroform import slice_file, SliceConfig
 
 trimesh.creation.box(extents=[20, 20, 20]).export("cube.stl")
 

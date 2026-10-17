@@ -1,8 +1,8 @@
 """ASCII Common Layer Interface (.cli) exporter.
 
-NOTE: the exact CLI dialect (units, ASCII vs binary, header keywords, the
-POLYLINE direction flag) must be confirmed against the STM32 firmware. Those
-knobs live here so matching the real machine is a change to this one file.
+The exact CLI dialect (units, ASCII vs binary, header keywords, the POLYLINE
+direction flag) depends on the machine's firmware, which is not chosen yet.
+Those settings live in this file, so matching the machine changes nothing else.
 
 Standard CLI has no fields for laser power or speed, so the ScanParams on each
 contour/hatch are not written here; the machine must get them another way.
