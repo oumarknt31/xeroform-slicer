@@ -298,3 +298,15 @@ def test_toast(window):
     window.toast("Hello")
     toasts = window.centralWidget().findChildren(Toast)
     assert toasts and not toasts[-1].isHidden()  # (test windows are never on screen)
+
+
+def test_theme_images_live_in_a_private_folder(app):
+    import stat
+    from slicerkit.gui import theme
+    path = theme._icon_file("check-mark", "#ffffff")
+    folder = os.path.dirname(path)
+    assert os.path.isfile(path) and folder == theme._private_dir()
+    assert os.path.basename(folder).startswith("slicerkit-theme-") and folder != "slicerkit-theme"
+    if os.name == "posix":
+        assert stat.S_IMODE(os.stat(folder).st_mode) == 0o700
+        assert os.stat(folder).st_uid == os.getuid()

@@ -4,7 +4,9 @@ Everything visual reads its colours from `current()`, so switching theme is one
 call to `apply()`. Icons are small SVGs drawn for this app and tinted at runtime.
 """
 from __future__ import annotations
+import atexit
 import os
+import shutil
 import tempfile
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
@@ -93,11 +95,23 @@ def _palette() -> QPalette:
     return p
 
 
+_image_dir: str | None = None
+
+
+def _private_dir() -> str:
+    """A folder only this process uses: mkdtemp makes it owner-only (0700) with a
+    random name, so another user can't pre-create it or plant links in it (as they
+    could with a fixed name in a shared /tmp). Removed when the app exits."""
+    global _image_dir
+    if _image_dir is None:
+        _image_dir = tempfile.mkdtemp(prefix="slicerkit-theme-")
+        atexit.register(shutil.rmtree, _image_dir, True)
+    return _image_dir
+
+
 def _icon_file(name: str, color: str) -> str:
     """An icon saved as PNG, for style sheets (which need image files)."""
-    folder = os.path.join(tempfile.gettempdir(), "slicerkit-theme")
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, f"{name}-{color.strip('#')}.png")
+    path = os.path.join(_private_dir(), f"{name}-{color.strip('#')}.png")
     if not os.path.exists(path):
         icon(name, color).pixmap(32, 32).save(path)
     return path.replace("\\", "/")
