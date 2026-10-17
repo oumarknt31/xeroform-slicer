@@ -28,10 +28,24 @@ python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\
 pip install -e .            # add [dev] for tests:  pip install -e ".[dev]"
 ```
 
+For the desktop app add `[gui]` (PySide6):  `pip install -e ".[dev,gui]"`.
+
 The package on PyPI that provides `import pyslm` is **PythonSLM** (installed
 automatically as a dependency).
 
 ## Use
+
+Desktop app:
+
+```bash
+slicerkit-gui                 # or: slicerkit-gui part.stl other.stl
+```
+
+Add models (with a copy count each), adjust the settings, press **Slice**, then
+step through the layers - outlines, hatches, travel moves and scan order, with
+zoom and pan. The report shows repairs, warnings, the packing result and the
+time estimate. *File > Save .cli* writes the result; nothing is written until
+then. Slicing runs in the background and can be cancelled.
 
 Command line:
 
@@ -144,6 +158,8 @@ src/slicerkit/
     base.py      # Exporter interface
     cli_ascii.py # ASCII .cli writer
   pipeline.py    # orchestrates the stages
+  summary.py     # the text report shared by CLI and GUI
+  gui/           # PySide6 desktop app (window.py, layer_view.py)
   preview.py     # interactive HTML layer viewer
   __main__.py    # CLI entry point
 tests/           # round-trip export, slicing correctness
@@ -163,7 +179,7 @@ examples/        # sample_cube.py
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [x] 3D nesting: several parts / copies packed into one build (bounding boxes)
-- [ ] PySide/Qt GUI on top of the engine
+- [x] PySide6 desktop GUI: parts + copies, settings, background slicing, layer view, save
 
 > The ASCII `.cli` output is structurally valid and self-consistent, and the
 > POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and

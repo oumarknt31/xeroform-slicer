@@ -10,7 +10,7 @@ from .part import MeshError
 from .config import SliceConfig
 from .scan_order import SCAN_ORDERS
 from .preview import write_preview
-from .laser import estimate_scan_time
+from .summary import summary_lines
 
 
 def main(argv=None) -> int:
@@ -86,26 +86,7 @@ def main(argv=None) -> int:
         print(f"slicerkit: error: {e}", file=sys.stderr)
         return 1
     layers = result.layers
-    for path, report in result.reports:
-        x, y, z = report.size
-        bodies = f"{report.bodies} bodies" if report.bodies != 1 else "1 body"
-        name = f"Model {os.path.basename(path)}" if several else "Model"
-        print(f"{name}: {x:.1f} x {y:.1f} x {z:.1f} mm, {report.volume:.0f} mm^3, "
-              f"{report.triangles} triangles, {bodies}")
-        for repair in report.repairs:
-            print(f"  repaired: {repair}")
-        for warning in report.warnings:
-            print(f"  warning: {warning}")
-    if result.build:
-        b = result.build
-        turned = sum(p.rotated for p in b.placements)
-        print(f"Build: {len(b.placements)} parts packed {b.height:.1f} mm high "
-              f"({turned} turned 90 deg), packing density {b.density:.1%}")
-    vectors = sum(l.num_hatch_vectors for l in layers)
-    print(f"Sliced {len(layers)} layers ({vectors} hatch vectors) -> {args.output}")
-    seconds = estimate_scan_time(layers, cfg.jump_speed)
-    print(f"Estimated laser time: {_hms(seconds)} (scanning only; excludes recoating/heating)")
-    print(f"Hatch energy density: {cfg.hatch_energy_density:.4f} J/mm^2")
+    print("\n".join(summary_lines(result, cfg, args.output)))
     if args.preview:
         title = (os.path.basename(args.inputs[0]) if not several
                  else f"build: {len(result.build.placements)} parts")
@@ -113,12 +94,6 @@ def main(argv=None) -> int:
                       every=args.preview_every, jump_speed=cfg.jump_speed)
         print(f"Preview -> {args.preview}")
     return 0
-
-
-def _hms(seconds: float) -> str:
-    m, s = divmod(round(seconds), 60)
-    h, m = divmod(m, 60)
-    return f"{h}h {m:02d}m {s:02d}s" if h else f"{m}m {s:02d}s"
 
 
 if __name__ == "__main__":
