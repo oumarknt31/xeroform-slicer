@@ -1,4 +1,5 @@
 """Scan order: same vectors, less laser-off travel."""
+
 import numpy as np
 import pytest
 import trimesh
@@ -82,8 +83,9 @@ def test_tube_travel_by_mode(tmp_path):
     trimesh.creation.annulus(r_min=4, r_max=10, height=10).export(str(stl))
     on, jump = {}, {}
     for mode in ("raster", "meander", "nearest"):
-        layers = slice_file(str(stl), str(tmp_path / "r.cli"),
-                            SliceConfig(layer_thickness=1, hatch_distance=0.5, scan_order=mode))
+        layers = slice_file(
+            str(stl), str(tmp_path / "r.cli"), SliceConfig(layer_thickness=1, hatch_distance=0.5, scan_order=mode)
+        )
         on[mode] = sum(path_lengths(l).hatch for l in layers)
         jump[mode] = sum(path_lengths(l).jump for l in layers)
     assert on["raster"] == pytest.approx(on["meander"]) == pytest.approx(on["nearest"])

@@ -5,6 +5,7 @@
 For a build with several parts, the parts are packed (nesting.arrange) and
 merged into one mesh first; everything after that is the same.
 """
+
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
@@ -22,9 +23,10 @@ from .config import SliceConfig
 @dataclass
 class BuildReport:
     """How several parts were packed into one build."""
+
     placements: list[Placement]
-    height: float    # mm, top of the highest part
-    density: float   # part volume / (plate area x build height), 0..1
+    height: float  # mm, top of the highest part
+    density: float  # part volume / (plate area x build height), 0..1
 
 
 @dataclass
@@ -43,8 +45,9 @@ class SliceResult:
 Progress = Callable[[int, int], None]
 
 
-def slice_job(input_path: str, output_path: str | None, config: SliceConfig | None = None,
-              progress: Progress | None = None) -> SliceResult:
+def slice_job(
+    input_path: str, output_path: str | None, config: SliceConfig | None = None, progress: Progress | None = None
+) -> SliceResult:
     """Slice `input_path` and write laser tool-paths to `output_path` (None = don't write).
 
     Raises MeshError (with a user-facing message) if the model can't be sliced.
@@ -55,13 +58,16 @@ def slice_job(input_path: str, output_path: str | None, config: SliceConfig | No
     exporter = get_exporter(config.export_format, units=config.units)
     part = Part(input_path, scale=config.scale, build_volume=config.build_volume)
     layers = _slice_and_export(part, config, exporter, output_path, progress)
-    return SliceResult(layers=layers, reports=[(input_path, part.report)],
-                       bounding_box=tuple(part.bounding_box))
+    return SliceResult(layers=layers, reports=[(input_path, part.report)], bounding_box=tuple(part.bounding_box))
 
 
-def slice_build(input_paths: list[str], output_path: str | None,
-                config: SliceConfig | None = None, copies: int = 1,
-                progress: Progress | None = None) -> SliceResult:
+def slice_build(
+    input_paths: list[str],
+    output_path: str | None,
+    config: SliceConfig | None = None,
+    copies: int = 1,
+    progress: Progress | None = None,
+) -> SliceResult:
     """Pack `copies` of every model in `input_paths` into one build, slice and export it.
 
     A path listed twice is packed twice. Needs config.build_volume. Raises
@@ -77,28 +83,36 @@ def slice_build(input_paths: list[str], output_path: str | None,
     loaded = {path: prepare_mesh(path, config.scale) for path in dict.fromkeys(input_paths)}
     jobs = [path for path in input_paths for _ in range(copies)]
     meshes = [loaded[path][0] for path in jobs]
-    merged, placements = arrange(meshes, config.build_volume, config.part_spacing,
-                                 config.allow_rotation, names=[os.path.basename(p) for p in jobs])
+    merged, placements = arrange(
+        meshes,
+        config.build_volume,
+        config.part_spacing,
+        config.allow_rotation,
+        names=[os.path.basename(p) for p in jobs],
+    )
     part = Part.from_mesh(merged)
     layers = _slice_and_export(part, config, exporter, output_path, progress)
 
     X, Y, _ = config.build_volume
     height = part.report.size[2]
-    build = BuildReport(placements=placements, height=height,
-                        density=sum(m.volume for m in meshes) / (X * Y * height))
-    return SliceResult(layers=layers, reports=[(p, r) for p, (_, r) in loaded.items()], build=build,
-                       bounding_box=tuple(part.bounding_box))
+    build = BuildReport(placements=placements, height=height, density=sum(m.volume for m in meshes) / (X * Y * height))
+    return SliceResult(
+        layers=layers,
+        reports=[(p, r) for p, (_, r) in loaded.items()],
+        build=build,
+        bounding_box=tuple(part.bounding_box),
+    )
 
 
 def export(result: SliceResult, output_path: str, config: SliceConfig | None = None) -> None:
     """Write an already-sliced result to `output_path` (e.g. after previewing it)."""
     config = config or SliceConfig()
-    get_exporter(config.export_format, units=config.units).write(
-        result.layers, output_path, result.bounding_box)
+    get_exporter(config.export_format, units=config.units).write(result.layers, output_path, result.bounding_box)
 
 
-def _slice_and_export(part: Part, config: SliceConfig, exporter, output_path: str | None,
-                      progress: Progress | None = None) -> list[Layer]:
+def _slice_and_export(
+    part: Part, config: SliceConfig, exporter, output_path: str | None, progress: Progress | None = None
+) -> list[Layer]:
     settings = HatchSettings(
         hatch_angle=config.hatch_angle,
         hatch_angle_increment=config.hatch_angle_increment,
@@ -110,8 +124,11 @@ def _slice_and_export(part: Part, config: SliceConfig, exporter, output_path: st
     layers = slice_part(part, settings, config.layer_thickness, config.laser_settings(), progress)
     if not layers:
         height, t = part.report.size[2], config.layer_thickness
-        reason = (f"it is {height:.3g} mm tall, thinner than one {t:g} mm layer" if height < t else
-                  f"no slice (taken every {t:g} mm) passes through it - its bodies are too thin")
+        reason = (
+            f"it is {height:.3g} mm tall, thinner than one {t:g} mm layer"
+            if height < t
+            else f"no slice (taken every {t:g} mm) passes through it - its bodies are too thin"
+        )
         raise MeshError(" ".join([f"The model produced no layers: {reason}.", *part.report.warnings]))
     if output_path is not None:
         exporter.write(layers, output_path, part.bounding_box)

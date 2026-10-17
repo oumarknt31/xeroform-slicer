@@ -3,6 +3,7 @@
 Run:  xeroform-gui [model.stl | project.xeroform ...]   or   python -m xeroform.gui
       xeroform-gui --smoke-test   checks a build works (slice, export, open the window)
 """
+
 from __future__ import annotations
 import logging
 import os
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationDisplayName(APP_NAME)
     app.setApplicationVersion(__version__)
     from .theme import app_icon
+
     app.setWindowIcon(app_icon())
     log_path = _setup_logging()
     log.info("XeroForm %s starting", __version__)

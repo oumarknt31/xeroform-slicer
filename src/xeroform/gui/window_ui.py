@@ -1,11 +1,22 @@
 """How the XeroForm window is laid out: header, sidebar, viewer and menus."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QPushButton,
-    QScrollArea, QSlider, QStackedWidget, QVBoxLayout, QWidget,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from . import theme
@@ -150,8 +161,7 @@ class WindowLayoutMixin:
         bl = QHBoxLayout(self.banner)
         bl.setContentsMargins(14, 8, 8, 8)
         self.banner_icon = QLabel()
-        text = QLabel("Parts or settings changed since this slice. The view is out of date "
-                      "and can't be exported.")
+        text = QLabel("Parts or settings changed since this slice. The view is out of date and can't be exported.")
         text.setWordWrap(True)
         again = QPushButton("Slice again")
         again.setObjectName("primary")
@@ -175,12 +185,13 @@ class WindowLayoutMixin:
         top.addWidget(self.view_switch)
         top.addStretch()
         self.chips = {}
-        for text, name, on, tip in [("Outlines", "show_contours", True, "Part outlines (holes in blue)"),
-                                    ("Hatches", "show_hatches", True, "Fill lines"),
-                                    ("Travel", "show_travel", False, "Laser-off moves between lines"),
-                                    ("Scan order", "scan_order", False, "Colour the fill from first (yellow) "
-                                                                         "to last (purple)"),
-                                    ("Grid", "show_grid", True, "mm grid")]:
+        for text, name, on, tip in [
+            ("Outlines", "show_contours", True, "Part outlines (holes in blue)"),
+            ("Hatches", "show_hatches", True, "Fill lines"),
+            ("Travel", "show_travel", False, "Laser-off moves between lines"),
+            ("Scan order", "scan_order", False, "Colour the fill from first (yellow) to last (purple)"),
+            ("Grid", "show_grid", True, "mm grid"),
+        ]:
             c = chip(text, on, tip)
             c.toggled.connect(lambda checked, n=name: self._set_view_option(n, checked))
             _keep_space(c)
@@ -194,8 +205,7 @@ class WindowLayoutMixin:
 
         # views + the vertical layer slider, or an empty state before the first slice
         self.pages = QStackedWidget()
-        self.empty = EmptyState("drop", "Drop models here",
-                                "STL, OBJ, PLY or 3MF. Or open a project.", "Add models")
+        self.empty = EmptyState("drop", "Drop models here", "STL, OBJ, PLY or 3MF. Or open a project.", "Add models")
         self.empty.button.clicked.connect(self.add_models_dialog)
         self._themed.append(self.empty)
         self.pages.addWidget(self.empty)
@@ -207,8 +217,11 @@ class WindowLayoutMixin:
         self.view = LayerView()
         self.stack_view = StackView()
         self.layout_view = LayoutView()
-        for v, name in ((self.view, "Layer view"), (self.stack_view, "3D layer stack"),
-                        (self.layout_view, "Build layout")):
+        for v, name in (
+            (self.view, "Layer view"),
+            (self.stack_view, "3D layer stack"),
+            (self.layout_view, "Build layout"),
+        ):
             v.setAccessibleName(name)
             self.views.addWidget(v)
         sl.addWidget(self.views, 1)
@@ -254,9 +267,16 @@ class WindowLayoutMixin:
         tiles = QGridLayout()
         tiles.setSpacing(10)
         self.tiles = {}
-        for i, (key, label) in enumerate([("layers", "Layers"), ("height", "Build height"),
-                                          ("time", "Laser time"), ("parts", "Parts"),
-                                          ("density", "Packing"), ("energy", "Energy density")]):
+        for i, (key, label) in enumerate(
+            [
+                ("layers", "Layers"),
+                ("height", "Build height"),
+                ("time", "Laser time"),
+                ("parts", "Parts"),
+                ("density", "Packing"),
+                ("energy", "Energy density"),
+            ]
+        ):
             tile = StatTile(label)
             self.tiles[key] = tile
             tiles.addWidget(tile, 0, i)
@@ -274,14 +294,18 @@ class WindowLayoutMixin:
         col.addWidget(self.details)
 
         # keyboard: step through layers while the viewer has focus
-        for keys, step in [((Qt.Key_Right, Qt.Key_Up), 1), ((Qt.Key_Left, Qt.Key_Down), -1),
-                           ((Qt.Key_PageUp,), 10), ((Qt.Key_PageDown,), -10)]:
+        for keys, step in [
+            ((Qt.Key_Right, Qt.Key_Up), 1),
+            ((Qt.Key_Left, Qt.Key_Down), -1),
+            ((Qt.Key_PageUp,), 10),
+            ((Qt.Key_PageDown,), -10),
+        ]:
             for key in keys:
-                QShortcut(QKeySequence(key), viewer, lambda s=step: self._step(s),
-                          context=Qt.WidgetWithChildrenShortcut)
+                QShortcut(
+                    QKeySequence(key), viewer, lambda s=step: self._step(s), context=Qt.WidgetWithChildrenShortcut
+                )
         QShortcut(QKeySequence(Qt.Key_Home), viewer, lambda: self._goto(0), context=Qt.WidgetWithChildrenShortcut)
-        QShortcut(QKeySequence(Qt.Key_End), viewer, lambda: self._goto(10 ** 9),
-                  context=Qt.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence(Qt.Key_End), viewer, lambda: self._goto(10**9), context=Qt.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(Qt.Key_Space), viewer, self._toggle_scan, context=Qt.WidgetWithChildrenShortcut)
         return w
 

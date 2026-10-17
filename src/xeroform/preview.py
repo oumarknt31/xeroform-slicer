@@ -4,6 +4,7 @@ Open the file in any browser to step through layers and check outlines, hatch
 fill, scan order and laser-off travel moves - no printer or extra software
 needed. Like the exporters, this only reads XeroForm's own Layer model.
 """
+
 from __future__ import annotations
 import html
 import json
@@ -18,8 +19,7 @@ def _params(items) -> list[float] | None:
     return [p.power, p.speed] if p else None
 
 
-def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3,
-                 jump_speed: float | None = None) -> dict:
+def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3, jump_speed: float | None = None) -> dict:
     """Layer geometry as plain JSON-ready data (every `every`-th layer).
 
     With `jump_speed` (mm/s) and laser params on the layers, scan times are included.
@@ -36,18 +36,29 @@ def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3,
             all_pts.append(pts)
             contours.append({"hole": bool(c.is_hole), "pts": pts.ravel().tolist()})
         if layer.hatches:
-            segs = np.round(np.concatenate([np.asarray(h.segments, dtype=float).reshape(-1, 2, 2)
-                                            for h in layer.hatches]), decimals)
+            segs = np.round(
+                np.concatenate([np.asarray(h.segments, dtype=float).reshape(-1, 2, 2) for h in layer.hatches]), decimals
+            )
             all_pts.append(segs.reshape(-1, 2))
             hatches = segs.ravel().tolist()
         else:
             hatches = []
         lengths = path_lengths(layer)
-        stats = {"contour_mm": lengths.contour, "hatch_mm": lengths.hatch, "jump_mm": lengths.jump,
-                 "time_s": _time_or_none(layer, jump_speed)}
-        out.append({"z": round(float(layer.z), 6), "contours": contours, "hatches": hatches,
-                    "params": {"contour": _params(layer.contours), "hatch": _params(layer.hatches)},
-                    "stats": stats})
+        stats = {
+            "contour_mm": lengths.contour,
+            "hatch_mm": lengths.hatch,
+            "jump_mm": lengths.jump,
+            "time_s": _time_or_none(layer, jump_speed),
+        }
+        out.append(
+            {
+                "z": round(float(layer.z), 6),
+                "contours": contours,
+                "hatches": hatches,
+                "params": {"contour": _params(layer.contours), "hatch": _params(layer.hatches)},
+                "stats": stats,
+            }
+        )
 
     if all_pts:
         pts = np.concatenate(all_pts)
@@ -56,8 +67,7 @@ def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3,
         bounds = [0.0, 0.0, 1.0, 1.0]
     times = [_time_or_none(layer, jump_speed) for layer in layers]
     total = None if None in times or not times else sum(times)
-    return {"bounds": bounds, "total_layers": len(layers), "every": every,
-            "total_time_s": total, "layers": out}
+    return {"bounds": bounds, "total_layers": len(layers), "every": every, "total_time_s": total, "layers": out}
 
 
 def _time_or_none(layer: Layer, jump_speed: float | None) -> float | None:
@@ -69,18 +79,16 @@ def _time_or_none(layer: Layer, jump_speed: float | None) -> float | None:
         return None
 
 
-def write_preview(layers: list[Layer], path: str, title: str = "XeroForm preview",
-                  every: int = 1, jump_speed: float | None = None) -> None:
+def write_preview(
+    layers: list[Layer], path: str, title: str = "XeroForm preview", every: int = 1, jump_speed: float | None = None
+) -> None:
     """Write an interactive HTML preview of `layers` to `path`.
 
     every      : keep every n-th layer only, to keep the file small for big parts.
     jump_speed : laser-off speed (mm/s); enables the scan-time estimates.
     """
-    data = json.dumps(preview_data(layers, every=every, jump_speed=jump_speed),
-                      separators=(",", ":"))
-    page = (_TEMPLATE
-            .replace("__TITLE__", html.escape(title))
-            .replace("__DATA__", data.replace("</", "<\\/")))
+    data = json.dumps(preview_data(layers, every=every, jump_speed=jump_speed), separators=(",", ":"))
+    page = _TEMPLATE.replace("__TITLE__", html.escape(title)).replace("__DATA__", data.replace("</", "<\\/"))
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(page)
 

@@ -7,6 +7,7 @@ Those settings live in this file, so matching the machine changes nothing else.
 Standard CLI has no fields for laser power or speed, so the ScanParams on each
 contour/hatch are not written here; the machine must get them another way.
 """
+
 from __future__ import annotations
 import numpy as np
 
@@ -31,10 +32,7 @@ class AsciiCliExporter(Exporter):
         with open(path, "w", encoding="ascii", newline="\n") as f:
             f.write("$$HEADERSTART\n$$ASCII\n")
             f.write(f"$$UNITS/{self.units:.6f}\n$$VERSION/200\n$$LABEL/1,part\n")
-            f.write(
-                f"$$DIMENSION/{n(bb[0])},{n(bb[1])},{n(bb[2])},"
-                f"{n(bb[3])},{n(bb[4])},{n(bb[5])}\n"
-            )
+            f.write(f"$$DIMENSION/{n(bb[0])},{n(bb[1])},{n(bb[2])},{n(bb[3])},{n(bb[4])},{n(bb[5])}\n")
             f.write(f"$$LAYERS/{len(layers)}\n$$HEADEREND\n$$GEOMETRYSTART\n")
             for layer in layers:
                 f.write(f"$$LAYER/{n(layer.z)}\n")

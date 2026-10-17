@@ -1,4 +1,5 @@
 """Preview: the HTML viewer carries the same geometry as the in-memory layers."""
+
 import json
 import re
 

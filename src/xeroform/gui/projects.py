@@ -1,5 +1,6 @@
 """Projects and files: open/save projects, export, recent files, saved window state,
 and dropping files on the window."""
+
 from __future__ import annotations
 import json
 import logging
@@ -20,15 +21,21 @@ log = logging.getLogger("xeroform.gui")
 
 class ProjectsMixin:
     def _default_name(self, ext: str) -> str:
-        base = (os.path.splitext(os.path.basename(self.project_path))[0] if self.project_path
-                else os.path.splitext(os.path.basename(self.result_jobs[0]))[0] if self.result_jobs else "build")
+        base = (
+            os.path.splitext(os.path.basename(self.project_path))[0]
+            if self.project_path
+            else os.path.splitext(os.path.basename(self.result_jobs[0]))[0]
+            if self.result_jobs
+            else "build"
+        )
         return os.path.join(self._last_dir(), base + ext)
 
     def export_cli(self) -> None:
         if self.result is None or self.stale:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export laser paths", self._default_name(".cli"),
-                                              "Common Layer Interface (*.cli)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export laser paths", self._default_name(".cli"), "Common Layer Interface (*.cli)"
+        )
         if not path:
             return
         try:
@@ -46,8 +53,12 @@ class ProjectsMixin:
         if not path:
             return
         try:
-            write_preview(self.result.layers, path, title=os.path.basename(self._default_name("")),
-                          jump_speed=self.result_config.jump_speed)
+            write_preview(
+                self.result.layers,
+                path,
+                title=os.path.basename(self._default_name("")),
+                jump_speed=self.result_config.jump_speed,
+            )
         except OSError as e:
             QMessageBox.warning(self, "Export failed", f"Could not write {path}:\n{e.strerror or e}")
             return
@@ -61,8 +72,12 @@ class ProjectsMixin:
         if not self.dirty or (self.project_path is None and not self.parts.parts()):
             return True
         answer = QMessageBox.question(
-            self, "Unsaved changes", "Save the changes to this project first?",
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+            self,
+            "Unsaved changes",
+            "Save the changes to this project first?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
         if answer == QMessageBox.Save:
             return self.save_project()
         return answer == QMessageBox.Discard
@@ -96,8 +111,11 @@ class ProjectsMixin:
         missing = [p for p in project.parts if not os.path.isfile(p.path)]
         found = [p for p in project.parts if os.path.isfile(p.path)]
         if missing:
-            QMessageBox.warning(self, "Missing models", "These models were not found and are left out:\n\n"
-                                + "\n".join(p.path for p in missing))
+            QMessageBox.warning(
+                self,
+                "Missing models",
+                "These models were not found and are left out:\n\n" + "\n".join(p.path for p in missing),
+            )
 
         def done():
             self.dirty = bool(missing)

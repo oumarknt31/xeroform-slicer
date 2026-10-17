@@ -1,4 +1,5 @@
 """Laser settings: scan params on geometry, path lengths, time estimate, energy density."""
+
 import numpy as np
 import pytest
 import trimesh
@@ -69,8 +70,9 @@ def test_hatch_energy_density():
 def test_sliced_geometry_carries_params(tmp_path):
     stl = tmp_path / "cube.stl"
     trimesh.creation.box(extents=[10, 10, 10]).export(str(stl))
-    cfg = SliceConfig(layer_thickness=1, hatch_distance=1, contour_power=3, contour_speed=300,
-                      hatch_power=6, hatch_speed=800)
+    cfg = SliceConfig(
+        layer_thickness=1, hatch_distance=1, contour_power=3, contour_speed=300, hatch_power=6, hatch_speed=800
+    )
     layers = slice_file(str(stl), str(tmp_path / "cube.cli"), cfg)
     for layer in layers:
         assert all(c.params == ScanParams(3, 300) for c in layer.contours)
@@ -81,8 +83,24 @@ def test_sliced_geometry_carries_params(tmp_path):
 def test_cli_reports_time_and_energy(tmp_path, capsys):
     stl = tmp_path / "cube.stl"
     trimesh.creation.box(extents=[10, 10, 10]).export(str(stl))
-    assert main([str(stl), "-o", str(tmp_path / "c.cli"), "--layer", "1",
-                 "--hatch-power", "4", "--hatch-speed", "400", "--hatch-distance", "0.25"]) == 0
+    assert (
+        main(
+            [
+                str(stl),
+                "-o",
+                str(tmp_path / "c.cli"),
+                "--layer",
+                "1",
+                "--hatch-power",
+                "4",
+                "--hatch-speed",
+                "400",
+                "--hatch-distance",
+                "0.25",
+            ]
+        )
+        == 0
+    )
     out = capsys.readouterr().out
     assert "Estimated laser time:" in out
     assert "Hatch energy density: 0.0400 J/mm^2" in out

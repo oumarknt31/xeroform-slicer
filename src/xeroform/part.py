@@ -5,6 +5,7 @@ triangles, inside-out faces, small holes. This module repairs what can be
 repaired safely, refuses what can't (with a message saying what to do), and
 places the part on the build platform before PySLM ever sees it.
 """
+
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
@@ -52,10 +53,11 @@ class MeshError(ValueError):
 @dataclass
 class MeshReport:
     """What was found and fixed while loading a model."""
+
     triangles: int
     bodies: int
     size: tuple[float, float, float]  # mm (x, y, z), after scaling
-    volume: float                     # mm^3 (summed over bodies; overlaps count twice)
+    volume: float  # mm^3 (summed over bodies; overlaps count twice)
     repairs: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -71,8 +73,13 @@ class Part:
     build_volume : (x, y, z) in mm; a model that doesn't fit raises MeshError.
     """
 
-    def __init__(self, mesh_path: str, name: str = "part", scale: float = 1.0,
-                 build_volume: tuple[float, float, float] | None = None):
+    def __init__(
+        self,
+        mesh_path: str,
+        name: str = "part",
+        scale: float = 1.0,
+        build_volume: tuple[float, float, float] | None = None,
+    ):
         mesh, self.report = prepare_mesh(mesh_path, scale)
         check_fits(mesh, build_volume)
         self._part = pyslm.Part(name)
@@ -185,8 +192,10 @@ def shell_warnings(mesh: trimesh.Trimesh) -> list[str]:
     shared = int(np.count_nonzero(_edge_use_counts(mesh) > 2))
     if not shared:
         return []
-    return [f"{shared} edges are shared by more than two triangles, where parts of the model "
-            "touch or overlap. It is sliced as one solid - check the preview."]
+    return [
+        f"{shared} edges are shared by more than two triangles, where parts of the model "
+        "touch or overlap. It is sliced as one solid - check the preview."
+    ]
 
 
 def place_on_platform(mesh: trimesh.Trimesh) -> None:
@@ -199,15 +208,16 @@ def unit_warnings(mesh: trimesh.Trimesh) -> list[str]:
     """Warn when the size suggests the model's units are wrong."""
     largest = float(mesh.extents.max())
     if largest < TINY_MM:
-        return [f"The model is only {largest:.3g} mm across - check its units. If it was made in "
-                "inches, use a scale of 25.4 (--scale 25.4); in cm use 10, in metres 1000."]
+        return [
+            f"The model is only {largest:.3g} mm across - check its units. If it was made in "
+            "inches, use a scale of 25.4 (--scale 25.4); in cm use 10, in metres 1000."
+        ]
     if largest > HUGE_MM:
         return [f"The model is {largest:.0f} mm across - check its units (--scale)."]
     return []
 
 
-def check_fits(mesh: trimesh.Trimesh,
-               build_volume: tuple[float, float, float] | None = None) -> None:
+def check_fits(mesh: trimesh.Trimesh, build_volume: tuple[float, float, float] | None = None) -> None:
     """Raise MeshError if the mesh doesn't fit the build volume."""
     if build_volume is None:
         return

@@ -1,4 +1,5 @@
 """Entry point for the packaged XeroForm app."""
+
 import sys
 
 from xeroform.gui import main

@@ -1,4 +1,5 @@
 """The Exporter contract every output format must satisfy."""
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 

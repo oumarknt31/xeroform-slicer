@@ -1,4 +1,5 @@
 """Nesting: packing several parts into one build."""
+
 import itertools
 
 import numpy as np
@@ -104,6 +105,7 @@ def test_arrange_merges_placed_meshes():
 
 # --- pipeline / CLI ---------------------------------------------------------
 
+
 @pytest.fixture
 def two_models(tmp_path):
     cube, ring = tmp_path / "cube.stl", tmp_path / "ring.stl"
@@ -118,7 +120,7 @@ def test_slice_build(two_models, tmp_path):
     assert [p for p, _ in result.reports] == list(two_models)
     assert len(result.build.placements) == 6
     assert result.build.height == pytest.approx(20)
-    total = 3 * (8000 + np.pi * (10 ** 2 - 4 ** 2) * 10)
+    total = 3 * (8000 + np.pi * (10**2 - 4**2) * 10)
     assert result.build.density == pytest.approx(total / (100 * 100 * 20), rel=0.02)
     assert len(result.layers) == 19
     # 3 cubes in every layer; the 10 mm tubes only in the lower half

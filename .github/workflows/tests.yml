@@ -18,6 +18,7 @@ jobs:
           python-version: "3.11"
       - run: pip install "ruff>=0.6"
       - run: ruff check src tests tools packaging/xeroform_gui.py
+      - run: ruff format --check src tests tools packaging/xeroform_gui.py
 
   test:
     strategy:

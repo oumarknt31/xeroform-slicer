@@ -1,4 +1,5 @@
 """Project files: round trip, relative paths, bad files."""
+
 import json
 import os
 
@@ -41,13 +42,16 @@ def test_unknown_settings_are_ignored_missing_get_defaults():
     assert config_from_dict(config_to_dict(SliceConfig(build_volume=(1, 2, 3)))).build_volume == (1, 2, 3)
 
 
-@pytest.mark.parametrize("content, match", [
-    ("not json", "not a valid project"),
-    ('{"format": "something-else"}', "not a XeroForm project"),
-    ('{"format": "xeroform-project", "version": 99}', "newer XeroForm"),
-    ('{"format": "xeroform-project", "settings": {"layer_thickness": 0}}', "Invalid settings"),
-    ('{"format": "xeroform-project", "parts": [{"copies": 2}]}', "malformed parts"),
-])
+@pytest.mark.parametrize(
+    "content, match",
+    [
+        ("not json", "not a valid project"),
+        ('{"format": "something-else"}', "not a XeroForm project"),
+        ('{"format": "xeroform-project", "version": 99}', "newer XeroForm"),
+        ('{"format": "xeroform-project", "settings": {"layer_thickness": 0}}', "Invalid settings"),
+        ('{"format": "xeroform-project", "parts": [{"copies": 2}]}', "malformed parts"),
+    ],
+)
 def test_bad_files(tmp_path, content, match):
     path = tmp_path / "bad.xeroform"
     path.write_text(content)
@@ -66,12 +70,12 @@ def test_save_is_atomic(tmp_path):
     assert path.exists() and not (tmp_path / "p.xeroform.tmp").exists()
 
 
-@pytest.mark.parametrize("raw", ["\\\\attacker\\share\\part.stl", "//attacker/share/part.stl",
-                                 "\\\\?\\UNC\\attacker\\share\\part.stl"])
+@pytest.mark.parametrize(
+    "raw", ["\\\\attacker\\share\\part.stl", "//attacker/share/part.stl", "\\\\?\\UNC\\attacker\\share\\part.stl"]
+)
 def test_network_paths_are_refused(tmp_path, raw):
     path = tmp_path / "p.xeroform"
-    path.write_text(json.dumps({"format": "xeroform-project", "version": 1,
-                                "parts": [{"path": raw, "copies": 1}]}))
+    path.write_text(json.dumps({"format": "xeroform-project", "version": 1, "parts": [{"path": raw, "copies": 1}]}))
     with pytest.raises(ProjectError, match="network location"):
         Project.load(str(path))
 
@@ -83,4 +87,3 @@ def test_local_paths_outside_the_folder_still_work(tmp_path):
     model = tmp_path / "models" / "part.stl"
     Project([ProjectPart(str(model))]).save(str(proj / "p.xeroform"))
     assert Project.load(str(proj / "p.xeroform")).parts[0].path == str(model)
-

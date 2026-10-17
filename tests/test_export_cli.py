@@ -1,4 +1,5 @@
 """Round-trip test: slice a cube, export .cli, read it back, check nothing was lost."""
+
 import numpy as np
 import trimesh
 
@@ -17,11 +18,11 @@ def _read_first_layer(cli_path):
         elif started and line.startswith("$$POLYLINE/"):
             p = line.split("/")[1].split(",")
             npts = int(p[2])
-            polys.append(np.array(p[3:3 + 2 * npts], float).reshape(-1, 2))
+            polys.append(np.array(p[3 : 3 + 2 * npts], float).reshape(-1, 2))
         elif started and line.startswith("$$HATCHES/"):
             p = line.split("/")[1].split(",")
             nseg = int(p[1])
-            hatches.append(np.array(p[2:2 + 4 * nseg], float).reshape(-1, 2, 2))
+            hatches.append(np.array(p[2 : 2 + 4 * nseg], float).reshape(-1, 2, 2))
     return polys, hatches
 
 
@@ -54,6 +55,7 @@ def test_unknown_format_raises(tmp_path):
     stl = tmp_path / "cube.stl"
     trimesh.creation.box(extents=[10, 10, 10]).export(str(stl))
     import pytest
+
     with pytest.raises(ValueError):
         slice_file(str(stl), str(tmp_path / "x.foo"), SliceConfig(export_format="foo"))
 

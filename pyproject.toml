@@ -60,6 +60,9 @@ version = { attr = "xeroform.__version__" }
 line-length = 120
 target-version = "py39"
 
+[tool.ruff.format]
+quote-style = "double"
+
 [tool.ruff.lint]
 select = ["F", "E9", "B", "S"]
 ignore = ["S101", "S311", "B905"]   # asserts in tests; non-crypto random; zip(strict=) is 3.10+

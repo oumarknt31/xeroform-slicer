@@ -1,4 +1,5 @@
 """Sidebar panels: the parts to print, and every slicing setting."""
+
 from __future__ import annotations
 import os
 from dataclasses import fields
@@ -6,8 +7,19 @@ from dataclasses import fields
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView,
-    QLabel, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..config import SliceConfig
@@ -24,31 +36,88 @@ def gui_defaults() -> SliceConfig:
     """SliceConfig defaults, with the placeholder build volume on so packing works."""
     return SliceConfig(build_volume=PLACEHOLDER_VOLUME)
 
+
 # (SliceConfig field, label, min, max, step, decimals, suffix, tooltip)
 NUMBER_FIELDS = {
     "Slicing": [
-        ("layer_thickness", "Layer thickness", 0.01, 5, 0.01, 3, " mm",
-         "Height of one powder layer. Thinner layers give finer detail but more layers to print."),
-        ("hatch_distance", "Hatch spacing", 0.01, 5, 0.01, 3, " mm",
-         "Distance between fill lines. Keep it below the laser spot size so lines overlap."),
-        ("hatch_angle", "Hatch angle", -180, 180, 1, 1, " °",
-         "Fill direction on the first layer (PySLM convention: lines run at this angle + 90°)."),
-        ("hatch_angle_increment", "Rotation per layer", -180, 180, 1, 1, " °",
-         "Added to the fill direction on every layer, to spread heat and stress. 0 = fixed."),
+        (
+            "layer_thickness",
+            "Layer thickness",
+            0.01,
+            5,
+            0.01,
+            3,
+            " mm",
+            "Height of one powder layer. Thinner layers give finer detail but more layers to print.",
+        ),
+        (
+            "hatch_distance",
+            "Hatch spacing",
+            0.01,
+            5,
+            0.01,
+            3,
+            " mm",
+            "Distance between fill lines. Keep it below the laser spot size so lines overlap.",
+        ),
+        (
+            "hatch_angle",
+            "Hatch angle",
+            -180,
+            180,
+            1,
+            1,
+            " °",
+            "Fill direction on the first layer (PySLM convention: lines run at this angle + 90°).",
+        ),
+        (
+            "hatch_angle_increment",
+            "Rotation per layer",
+            -180,
+            180,
+            1,
+            1,
+            " °",
+            "Added to the fill direction on every layer, to spread heat and stress. 0 = fixed.",
+        ),
     ],
     "Laser": [
         ("hatch_power", "Fill power", 0, 1000, 0.5, 2, " W", "Laser power while filling."),
         ("hatch_speed", "Fill speed", 1, 100000, 50, 0, " mm/s", "Scan speed while filling."),
         ("contour_power", "Outline power", 0, 1000, 0.5, 2, " W", "Laser power on part outlines."),
         ("contour_speed", "Outline speed", 1, 100000, 50, 0, " mm/s", "Scan speed on part outlines."),
-        ("jump_speed", "Jump speed", 1, 100000, 100, 0, " mm/s",
-         "Speed of laser-off moves between lines. Used for the time estimate."),
+        (
+            "jump_speed",
+            "Jump speed",
+            1,
+            100000,
+            100,
+            0,
+            " mm/s",
+            "Speed of laser-off moves between lines. Used for the time estimate.",
+        ),
     ],
     "Placement": [
-        ("scale", "Scale", 0.001, 10000, 1, 3, " ×",
-         "Multiply every model by this. Use 25.4 for models drawn in inches."),
-        ("part_spacing", "Part spacing", 0, 100, 0.5, 1, " mm",
-         "Gap kept between packed parts and to the chamber walls."),
+        (
+            "scale",
+            "Scale",
+            0.001,
+            10000,
+            1,
+            3,
+            " ×",
+            "Multiply every model by this. Use 25.4 for models drawn in inches.",
+        ),
+        (
+            "part_spacing",
+            "Part spacing",
+            0,
+            100,
+            0.5,
+            1,
+            " mm",
+            "Gap kept between packed parts and to the chamber walls.",
+        ),
     ],
 }
 
@@ -82,8 +151,7 @@ class PartsPanel(Card):
         self.table.verticalHeader().setDefaultSectionSize(34)
         self.table.setToolTip("Drop model files on the window or use Add")
         col.addWidget(self.table)
-        self.empty_hint = QLabel("No models yet.\nDrop STL, OBJ, PLY or 3MF files on the window,\n"
-                                 "or click Add models.")
+        self.empty_hint = QLabel("No models yet.\nDrop STL, OBJ, PLY or 3MF files on the window,\nor click Add models.")
         self.empty_hint.setObjectName("hint")
         self.empty_hint.setAlignment(Qt.AlignCenter)
         self.empty_hint.setMinimumHeight(110)
@@ -138,8 +206,7 @@ class PartsPanel(Card):
         notes = list(report.repairs) + list(report.warnings)
         largest = max(x, y, z)
         if largest < TINY_MM:
-            notes.append(f"Only {largest:.3g} mm across at this scale - check the units "
-                         "(inches: scale 25.4).")
+            notes.append(f"Only {largest:.3g} mm across at this scale - check the units (inches: scale 25.4).")
         elif largest > HUGE_MM:
             notes.append(f"{largest:.0f} mm across at this scale - check the units.")
         warn = bool(report.warnings) or largest < TINY_MM or largest > HUGE_MM
@@ -182,8 +249,10 @@ class PartsPanel(Card):
     # --- what to print -----------------------------------------------------------
 
     def parts(self) -> list[ProjectPart]:
-        return [ProjectPart(self.table.item(r, 1).data(Qt.UserRole)[0], self.table.cellWidget(r, 2).value())
-                for r in range(self.table.rowCount())]
+        return [
+            ProjectPart(self.table.item(r, 1).data(Qt.UserRole)[0], self.table.cellWidget(r, 2).value())
+            for r in range(self.table.rowCount())
+        ]
 
     def jobs(self) -> list[str]:
         """Every part to print, a path repeated once per copy."""
@@ -234,7 +303,8 @@ class SettingsPanel(QWidget):
                 self.scan_order.addItems(SCAN_ORDERS)
                 self.scan_order.setToolTip(
                     "Order of the fill lines. nearest: least laser-off travel (default). "
-                    "meander: zig-zag across the layer. raster: all one direction.")
+                    "meander: zig-zag across the layer. raster: all one direction."
+                )
                 self.scan_order.currentTextChanged.connect(self.changed)
                 form.addRow("Scan order", self.scan_order)
             if title == "Placement":
@@ -243,8 +313,10 @@ class SettingsPanel(QWidget):
                 self.allow_rotation.toggled.connect(self.changed)
                 form.addRow(self.allow_rotation)
                 self.use_volume = QCheckBox("Build volume (mm)")
-                self.use_volume.setToolTip("Printable size of the machine. Needed to pack several parts; "
-                                           "150 mm is a placeholder until the machine is specified.")
+                self.use_volume.setToolTip(
+                    "Printable size of the machine. Needed to pack several parts; "
+                    "150 mm is a placeholder until the machine is specified."
+                )
                 self.use_volume.toggled.connect(self._volume_toggled)
                 vol = QHBoxLayout()
                 self.volume = []
@@ -283,8 +355,12 @@ class SettingsPanel(QWidget):
         known = {f.name for f in fields(SliceConfig)}
         values = {k: s.value() for k, s in self.spins.items() if k in known}
         volume = tuple(s.value() for s in self.volume) if self.use_volume.isChecked() else None
-        return SliceConfig(**values, scan_order=self.scan_order.currentText(),
-                           allow_rotation=self.allow_rotation.isChecked(), build_volume=volume)
+        return SliceConfig(
+            **values,
+            scan_order=self.scan_order.currentText(),
+            allow_rotation=self.allow_rotation.isChecked(),
+            build_volume=volume,
+        )
 
     def set_config(self, config: SliceConfig) -> None:
         self.blockSignals(True)

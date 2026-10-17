@@ -6,6 +6,7 @@ slice stays in memory until exported; changing a part or a setting afterwards
 marks it out of date and blocks exporting it. Projects (.xeroform) save the
 parts and every setting; the window remembers its layout, theme and settings.
 """
+
 from __future__ import annotations
 import logging
 import os
@@ -13,7 +14,14 @@ import os
 from PySide6.QtCore import QRectF, QSettings, QTimer, QUrl, qVersion
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QMainWindow, QMessageBox, QSplitter, QVBoxLayout, QWidget,
+    QApplication,
+    QFileDialog,
+    QFrame,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .. import __version__
@@ -106,8 +114,14 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
         """Re-tint icons and redraw views after a theme change."""
         for w in self._themed:
             w.restyle()
-        for b in (self.open_button, self.save_button, self.header_add, self.fit_button,
-                  self.scan_button, self.flip_button):
+        for b in (
+            self.open_button,
+            self.save_button,
+            self.header_add,
+            self.fit_button,
+            self.scan_button,
+            self.flip_button,
+        ):
             b.setIcon(theme.icon(b.property("iconName")))
         self.theme_button.setIcon(theme.icon(THEME_ICONS[theme.mode()]))
         self.theme_button.setToolTip(f"Theme: {THEME_NAMES[theme.mode()]} (click to change)")
@@ -229,8 +243,9 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
         self.details.header.setChecked(True)
         if details:  # unexpected: show the details and where the log is
             box = QMessageBox(QMessageBox.Critical, f"{what} failed", message, parent=self)
-            box.setInformativeText("This looks like a bug. The details are also in the log file "
-                                   "(Help ▸ Show Log File).")
+            box.setInformativeText(
+                "This looks like a bug. The details are also in the log file (Help ▸ Show Log File)."
+            )
             box.setDetailedText(details)
             box.exec()
         else:
@@ -333,24 +348,25 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
         self.tiles["height"].set(f"{height:.1f} mm")
         self.tiles["time"].set(hms(seconds), "Laser scanning only - recoating and heating not included")
         self.tiles["parts"].set(str(len(jobs)))
-        self.tiles["density"].set(f"{result.build.density:.1%}" if result.build else "–",
-                                  "Part volume / (plate area × build height)")
-        self.tiles["energy"].set(f"{config.hatch_energy_density:.3f} J/mm²",
-                                 "Fill power / (speed × hatch spacing) - the main number to tune per powder")
+        self.tiles["density"].set(
+            f"{result.build.density:.1%}" if result.build else "–", "Part volume / (plate area × build height)"
+        )
+        self.tiles["energy"].set(
+            f"{config.hatch_energy_density:.3f} J/mm²",
+            "Fill power / (speed × hatch spacing) - the main number to tune per powder",
+        )
 
     @staticmethod
     def _layout_items(result: SliceResult, jobs: list[str]):
         if result.build is None:
             x0, y0, z0, x1, y1, z1 = result.bounding_box
-            return [(QRectF(x0, y0, x1 - x0, y1 - y0), os.path.basename(jobs[0]),
-                     f"z {z0:.0f}–{z1:.0f} mm", 0)]
+            return [(QRectF(x0, y0, x1 - x0, y1 - y0), os.path.basename(jobs[0]), f"z {z0:.0f}–{z1:.0f} mm", 0)]
         levels = sorted({round(p.position[2], 3) for p in result.build.placements})
         items = []
         for p in result.build.placements:
             (x, y, z), (sx, sy, sz) = p.position, p.size
             detail = f"z {z:.0f}–{z + sz:.0f} mm" + (" · turned" if p.rotated else "")
-            items.append((QRectF(x, y, sx, sy), os.path.basename(jobs[p.item]), detail,
-                          levels.index(round(z, 3))))
+            items.append((QRectF(x, y, sx, sy), os.path.basename(jobs[p.item]), detail, levels.index(round(z, 3))))
         return items
 
     def _layer_changed(self, i: int) -> None:
@@ -362,8 +378,10 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
         holes = sum(c.is_hole for c in layer.contours)
         if layer.contours or layer.hatches:
             seconds = layer_scan_time(layer, self.result_config.jump_speed)
-            what = (f"{len(layer.contours)} contours ({holes} around holes) · "
-                    f"{layer.num_hatch_vectors} hatch vectors · {seconds:.1f} s")
+            what = (
+                f"{len(layer.contours)} contours ({holes} around holes) · "
+                f"{layer.num_hatch_vectors} hatch vectors · {seconds:.1f} s"
+            )
         else:
             what = "powder only (gap between stacked parts)"
         self.layer_info.setText(f"Layer {i + 1} of {len(self.result.layers)} · z {layer.z:.3f} mm · {what}")
@@ -395,7 +413,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
 
     def about(self) -> None:
         QMessageBox.about(
-            self, f"About {APP_NAME}",
+            self,
+            f"About {APP_NAME}",
             f"<h3>{APP_NAME} Slicer {__version__}</h3>"
             "<p>The open-source SLS slicer for the XeroForm printer: 3D models in, "
             "laser tool-paths out.</p>"
@@ -404,7 +423,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
             "licenses, among them Qt / PySide6 (LGPL-3.0) and PySLM (LGPL-2.1): see "
             f'<a href="{REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a> '
             "(also in the app folder).</p>"
-            f'<p><a href="{REPO_URL}">{REPO_URL.removeprefix("https://")}</a></p>')
+            f'<p><a href="{REPO_URL}">{REPO_URL.removeprefix("https://")}</a></p>',
+        )
 
     def show_log(self) -> None:
         if self.log_path and os.path.exists(self.log_path):

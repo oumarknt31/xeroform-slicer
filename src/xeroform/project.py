@@ -3,6 +3,7 @@
 Saved as JSON with the extension .xeroform. Model paths are stored relative to the project file, so a project folder can be
 moved or shared as a whole.
 """
+
 from __future__ import annotations
 import json
 import os
@@ -21,7 +22,7 @@ class ProjectError(ValueError):
 
 @dataclass
 class ProjectPart:
-    path: str        # absolute in memory; relative to the project file on disk
+    path: str  # absolute in memory; relative to the project file on disk
     copies: int = 1
 
 
@@ -66,8 +67,10 @@ class Project:
         # check the file exists - so refuse those before touching the filesystem.
         for raw, _ in entries:
             if _is_network_path(raw):
-                raise ProjectError(f"{path} refers to a model on a network location ({raw}). "
-                                   "Copy the model next to the project and add it again.")
+                raise ProjectError(
+                    f"{path} refers to a model on a network location ({raw}). "
+                    "Copy the model next to the project and add it again."
+                )
         parts = [ProjectPart(os.path.normpath(os.path.join(base, raw)), copies) for raw, copies in entries]
         return cls(parts=parts, config=config_from_dict(data.get("settings", {})))
 

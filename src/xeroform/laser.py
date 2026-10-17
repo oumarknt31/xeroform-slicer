@@ -1,4 +1,5 @@
 """Laser settings and scan-time estimates (independent of the output format)."""
+
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
@@ -9,6 +10,7 @@ from .layers import Layer, ScanParams
 @dataclass(frozen=True)
 class LaserSettings:
     """Scan parameters per vector type, plus the laser-off (jump) speed in mm/s."""
+
     contour: ScanParams
     hatch: ScanParams
     jump_speed: float
@@ -21,9 +23,10 @@ class LaserSettings:
 @dataclass(frozen=True)
 class PathLengths:
     """Distances (mm) the laser covers in one layer."""
+
     contour: float  # laser on, tracing outlines
-    hatch: float    # laser on, filling
-    jump: float     # laser off, moving between vectors
+    hatch: float  # laser on, filling
+    jump: float  # laser off, moving between vectors
 
 
 def _polyline_length(points) -> float:
@@ -61,8 +64,9 @@ def path_lengths(layer: Layer) -> PathLengths:
 def layer_scan_time(layer: Layer, jump_speed: float) -> float:
     """Seconds to scan one layer at constant speeds (no acceleration, no recoating)."""
     t = path_lengths(layer).jump / jump_speed
-    for item, length in [(c, _polyline_length(c.points)) for c in layer.contours] + \
-                        [(h, _segments_length(h.segments)) for h in layer.hatches]:
+    for item, length in [(c, _polyline_length(c.points)) for c in layer.contours] + [
+        (h, _segments_length(h.segments)) for h in layer.hatches
+    ]:
         if item.params is None:
             raise ValueError(f"layer z={layer.z} has vectors without laser params")
         t += length / item.params.speed

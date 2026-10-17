@@ -1,7 +1,8 @@
 """Render the XeroForm app icons from the logo SVG: .icns (macOS) and .ico (Windows).
 
-    python tools/make_icons.py      # writes packaging/xeroform.icns and packaging/xeroform.ico
+python tools/make_icons.py      # writes packaging/xeroform.icns and packaging/xeroform.ico
 """
+
 import io
 import os
 import sys

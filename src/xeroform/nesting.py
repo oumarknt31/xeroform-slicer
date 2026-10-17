@@ -11,6 +11,7 @@ square-ish block rather than a long row. Parts may be turned 90 degrees
 about Z but are never tipped over (orientation affects print quality). The
 packed group is centred on the plate, where the powder bed is most even.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -26,14 +27,15 @@ class NestingError(ValueError):
 
 @dataclass(frozen=True)
 class Placement:
-    item: int                              # index into the list of parts
-    position: tuple[float, float, float]   # min corner of the part's box (build coords, mm)
-    rotated: bool                          # turned 90 degrees about Z
+    item: int  # index into the list of parts
+    position: tuple[float, float, float]  # min corner of the part's box (build coords, mm)
+    rotated: bool  # turned 90 degrees about Z
     size: tuple[float, float, float] = (0.0, 0.0, 0.0)  # box size as placed (x, y, z), mm
 
 
-def pack_boxes(sizes, volume, spacing: float = 3.0, allow_rotation: bool = True,
-               names: list[str] | None = None) -> list[Placement]:
+def pack_boxes(
+    sizes, volume, spacing: float = 3.0, allow_rotation: bool = True, names: list[str] | None = None
+) -> list[Placement]:
     """Pack boxes of `sizes` [(x, y, z), ...] into `volume` (x, y, z), keeping the build low.
 
     Returns one Placement per box, in input order. Positions are build
@@ -50,7 +52,7 @@ def pack_boxes(sizes, volume, spacing: float = 3.0, allow_rotation: bool = True,
     _check_each_fits(sizes, volume, spacing, allow_rotation, names)
     order = sorted(range(len(sizes)), key=lambda i: -np.prod(sizes[i]))  # biggest first
 
-    boxes = np.empty((0, 6))   # placed, inflated: x0, y0, z0, x1, y1, z1
+    boxes = np.empty((0, 6))  # placed, inflated: x0, y0, z0, x1, y1, z1
     points = [(0.0, 0.0, 0.0)]  # extreme points: corners where a box can go
     height = 0.0
     reach_x = reach_y = 0.0  # footprint of everything placed so far
@@ -103,8 +105,7 @@ def _check_each_fits(sizes, volume, spacing, allow_rotation, names) -> None:
     X, Y, Z = volume
     for (sx, sy, sz), name in zip(sizes, names):
         footprints = [(sx, sy), (sy, sx)] if allow_rotation else [(sx, sy)]
-        if sz > Z or not any(w + 2 * spacing <= X + _TOL and d + 2 * spacing <= Y + _TOL
-                             for w, d in footprints):
+        if sz > Z or not any(w + 2 * spacing <= X + _TOL and d + 2 * spacing <= Y + _TOL for w, d in footprints):
             hint = "" if allow_rotation else " (turning parts is switched off)"
             raise NestingError(
                 f"{name} ({sx:.1f} x {sy:.1f} x {sz:.1f} mm) is too big for the "
@@ -116,11 +117,16 @@ def _check_each_fits(sizes, volume, spacing, allow_rotation, names) -> None:
 def _overlaps(boxes: np.ndarray, box: np.ndarray) -> bool:
     if not len(boxes):
         return False
-    return bool(np.any(
-        (boxes[:, 0] < box[3] - _TOL) & (boxes[:, 3] > box[0] + _TOL)
-        & (boxes[:, 1] < box[4] - _TOL) & (boxes[:, 4] > box[1] + _TOL)
-        & (boxes[:, 2] < box[5] - _TOL) & (boxes[:, 5] > box[2] + _TOL)
-    ))
+    return bool(
+        np.any(
+            (boxes[:, 0] < box[3] - _TOL)
+            & (boxes[:, 3] > box[0] + _TOL)
+            & (boxes[:, 1] < box[4] - _TOL)
+            & (boxes[:, 4] > box[1] + _TOL)
+            & (boxes[:, 2] < box[5] - _TOL)
+            & (boxes[:, 5] > box[2] + _TOL)
+        )
+    )
 
 
 def _footprint(p: Placement, size) -> tuple[float, float]:
@@ -132,13 +138,19 @@ def _centre(placements: list[Placement], sizes) -> list[Placement]:
     lo = np.min([p.position[:2] for p in placements], axis=0)
     hi = np.max([np.add(p.position[:2], _footprint(p, sizes[p.item])) for p in placements], axis=0)
     dx, dy = -(lo + hi) / 2
-    return [Placement(p.item, (p.position[0] + dx, p.position[1] + dy, p.position[2]), p.rotated,
-                      p.size) for p in placements]
+    return [
+        Placement(p.item, (p.position[0] + dx, p.position[1] + dy, p.position[2]), p.rotated, p.size)
+        for p in placements
+    ]
 
 
-def arrange(meshes: list[trimesh.Trimesh], volume, spacing: float = 3.0,
-            allow_rotation: bool = True,
-            names: list[str] | None = None) -> tuple[trimesh.Trimesh, list[Placement]]:
+def arrange(
+    meshes: list[trimesh.Trimesh],
+    volume,
+    spacing: float = 3.0,
+    allow_rotation: bool = True,
+    names: list[str] | None = None,
+) -> tuple[trimesh.Trimesh, list[Placement]]:
     """Pack `meshes` into `volume` and merge them into one mesh, ready to slice.
 
     The same mesh object may appear several times (copies); each gets its own place.

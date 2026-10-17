@@ -1,4 +1,5 @@
 """GUI tests, run headless. Skipped when PySide6 isn't installed."""
+
 import os
 
 import pytest
@@ -103,7 +104,7 @@ def test_slice_view_layout_and_export(window, models, tmp_path, monkeypatch):
     assert window.layer_info.text().startswith("Layer 6 of 19 · z 6.000 mm · 6 contours (2 around holes)")
     window._step(10)
     assert window.slider.value() == 15
-    window._goto(10 ** 9)
+    window._goto(10**9)
     assert window.slider.value() == 18
 
     items = window.layout_view.items
@@ -136,7 +137,7 @@ def test_project_save_and_open(window, models, tmp_path, monkeypatch):
     wait(window.add_models(list(models), [2, 1]))
     window.settings.spins["layer_thickness"].setValue(0.25)
     path = str(tmp_path / "job.xeroform")
-    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path[:-len(".xeroform")], ""))
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path[: -len(".xeroform")], ""))
     assert window.save_project()  # adds the extension
     assert os.path.exists(path) and not window.isWindowModified()
     assert window.windowTitle() == "job[*] — XeroForm" and window.title_label.text() == "job"
@@ -151,6 +152,7 @@ def test_project_save_and_open(window, models, tmp_path, monkeypatch):
 
 def test_open_project_with_missing_model(window, models, tmp_path):
     from xeroform.project import Project, ProjectPart
+
     path = str(tmp_path / "p.xeroform")
     Project([ProjectPart(models[0]), ProjectPart(str(tmp_path / "gone.stl"))]).save(path)
     wait(window.open_project(path))
@@ -203,6 +205,7 @@ def test_error_is_shown(window, models):
 
 def test_unexpected_error_shows_details(window, models, monkeypatch):
     import xeroform.gui.window as win
+
     monkeypatch.setattr(win, "slice_job", lambda *a, **k: 1 / 0)
     shown = []
     monkeypatch.setattr(QMessageBox, "exec", lambda self: shown.append(self.detailedText()))
@@ -214,8 +217,10 @@ def test_unexpected_error_shows_details(window, models, monkeypatch):
 
 # --- look & feel, new views ---------------------------------------------------
 
+
 def test_theme_switching(window):
     from xeroform.gui import theme
+
     assert theme.mode() == "dark"  # XeroForm is dark-first
     window.set_theme("light")
     assert theme.current()["bg"] == theme.LIGHT["bg"] and QSettings().value("theme") == "light"
@@ -255,11 +260,15 @@ def test_3d_stack_view(window, models):
     yaw = window.stack_view.yaw
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtCore import QEvent
+
     sv = window.stack_view
     for kind, x in [(QEvent.MouseButtonPress, 100), (QEvent.MouseMove, 160), (QEvent.MouseButtonRelease, 160)]:
         ev = QMouseEvent(kind, QPointF(x, 100), QPointF(x, 100), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
-        {QEvent.MouseButtonPress: sv.mousePressEvent, QEvent.MouseMove: sv.mouseMoveEvent,
-         QEvent.MouseButtonRelease: sv.mouseReleaseEvent}[kind](ev)
+        {
+            QEvent.MouseButtonPress: sv.mousePressEvent,
+            QEvent.MouseMove: sv.mouseMoveEvent,
+            QEvent.MouseButtonRelease: sv.mouseReleaseEvent,
+        }[kind](ev)
     assert sv.yaw != yaw  # orbited
     assert not sv.grab().isNull()
     window.view_switch.set_index(2)
@@ -289,7 +298,7 @@ def test_flipbook(window, models):
     assert window.slider.value() > 0
     window._toggle_flipbook()
     assert not window.flipbook.isActive()
-    window._goto(10 ** 9)
+    window._goto(10**9)
     window._toggle_flipbook()  # from the top, it starts over
     assert window.slider.value() <= 1
     window._stop_playback()
@@ -297,6 +306,7 @@ def test_flipbook(window, models):
 
 def test_toast(window):
     from xeroform.gui.widgets import Toast
+
     window.toast("Hello")
     toasts = window.centralWidget().findChildren(Toast)
     assert toasts and not toasts[-1].isHidden()  # (test windows are never on screen)
@@ -305,6 +315,7 @@ def test_toast(window):
 def test_theme_images_live_in_a_private_folder(app):
     import stat
     from xeroform.gui import theme
+
     path = theme._icon_file("check-mark", "#ffffff")
     folder = os.path.dirname(path)
     assert os.path.isfile(path) and os.path.normpath(folder) == os.path.normpath(theme._private_dir())
@@ -318,6 +329,7 @@ def test_garbage_is_collected_on_the_gui_thread_only(window):
     """The cycle collector must never free Qt objects on a worker thread (it crashes)."""
     import gc
     from xeroform.gui.tasks import _MainThreadGC
+
     app = QtWidgets.QApplication.instance()
     assert not gc.isenabled() and len(app.findChildren(_MainThreadGC)) == 1
     MainWindow().deleteLater()  # a second window doesn't install a second collector

@@ -4,6 +4,7 @@ The engine talks to the `Exporter` interface only. Adding a new machine format
 (binary CLI, OpenVectorFormat, a firmware-specific dialect) means adding one
 class here and registering it - nothing else in the engine changes.
 """
+
 from .base import Exporter
 from .cli_ascii import AsciiCliExporter
 

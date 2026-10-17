@@ -1,4 +1,5 @@
 """Slicing configuration / machine + material profile."""
+
 from __future__ import annotations
 from dataclasses import dataclass, replace
 
@@ -10,34 +11,42 @@ from .scan_order import SCAN_ORDERS
 @dataclass
 class SliceConfig:
     """All the knobs for one slice job. Tune per material (e.g. nylon PA12)."""
-    layer_thickness: float = 0.1      # mm
-    hatch_angle: float = 67.0         # deg, first layer
+
+    layer_thickness: float = 0.1  # mm
+    hatch_angle: float = 67.0  # deg, first layer
     hatch_angle_increment: float = 67.0  # deg added per layer (0 = fixed)
-    hatch_distance: float = 0.2       # mm
+    hatch_distance: float = 0.2  # mm
     num_inner_contours: int = 1
     num_outer_contours: int = 1
-    scan_order: str = "nearest"       # "nearest", "meander" or "raster" - see scan_order.py
+    scan_order: str = "nearest"  # "nearest", "meander" or "raster" - see scan_order.py
 
     # model placement
-    scale: float = 1.0                # e.g. 25.4 for a model drawn in inches
+    scale: float = 1.0  # e.g. 25.4 for a model drawn in inches
     build_volume: tuple[float, float, float] | None = None  # (x, y, z) mm; None = don't check
-    part_spacing: float = 3.0         # mm between packed parts, and from the walls
-    allow_rotation: bool = True       # let the packer turn parts 90 deg about Z
+    part_spacing: float = 3.0  # mm between packed parts, and from the walls
+    allow_rotation: bool = True  # let the packer turn parts 90 deg about Z
 
     # laser - placeholders until the laser is chosen and tuned on hardware
-    contour_power: float = 4.0        # W
-    contour_speed: float = 400.0      # mm/s
-    hatch_power: float = 5.0          # W
-    hatch_speed: float = 500.0        # mm/s
-    jump_speed: float = 2000.0        # mm/s, laser-off moves between vectors
+    contour_power: float = 4.0  # W
+    contour_speed: float = 400.0  # mm/s
+    hatch_power: float = 5.0  # W
+    hatch_speed: float = 500.0  # mm/s
+    jump_speed: float = 2000.0  # mm/s, laser-off moves between vectors
 
     # export
-    export_format: str = "cli"        # key in xeroform.export.EXPORTERS
-    units: float = 1.0                # mm per coordinate unit (confirm w/ firmware)
+    export_format: str = "cli"  # key in xeroform.export.EXPORTERS
+    units: float = 1.0  # mm per coordinate unit (confirm w/ firmware)
 
     def __post_init__(self):
-        for name in ("layer_thickness", "hatch_distance", "units", "scale",
-                     "contour_speed", "hatch_speed", "jump_speed"):
+        for name in (
+            "layer_thickness",
+            "hatch_distance",
+            "units",
+            "scale",
+            "contour_speed",
+            "hatch_speed",
+            "jump_speed",
+        ):
             if not getattr(self, name) > 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)!r}")
         for name in ("contour_power", "hatch_power", "part_spacing"):

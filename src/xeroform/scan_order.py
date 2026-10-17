@@ -11,6 +11,7 @@ happens here, on XeroForm's own model, so it doesn't depend on PySLM.
             evenly across the whole layer, holes and gaps included.
   raster  : PySLM's order - every vector in the same direction.
 """
+
 from __future__ import annotations
 import numpy as np
 from scipy.spatial import cKDTree
@@ -22,8 +23,7 @@ SCAN_ORDERS = ("nearest", "meander", "raster")
 _LINE_TOL = 1e-3
 
 
-def order_segments(segments: np.ndarray, mode: str = "nearest",
-                   start: np.ndarray | None = None) -> np.ndarray:
+def order_segments(segments: np.ndarray, mode: str = "nearest", start: np.ndarray | None = None) -> np.ndarray:
     """Return the (M, 2, 2) hatch `segments` re-ordered for scanning.
 
     start : where the laser is before the first vector (used by "nearest").

@@ -1,4 +1,5 @@
 """Names and file types shared across the XeroForm window modules."""
+
 from ..project import EXTENSION
 
 APP_NAME = "XeroForm"

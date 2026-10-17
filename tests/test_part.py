@@ -1,4 +1,5 @@
 """Loading real-world meshes: errors, repairs, units, placement, build volume."""
+
 import numpy as np
 import pytest
 import trimesh
@@ -23,6 +24,7 @@ def _box(extents=(20, 20, 20), at=(0, 0, 0)):
 
 # --- files that can't be read ---------------------------------------------
 
+
 def test_missing_file(tmp_path):
     with pytest.raises(MeshError, match="File not found"):
         Part(str(tmp_path / "nope.stl"))
@@ -42,6 +44,7 @@ def test_reads_3mf(tmp_path):
 
 
 # --- repairs ----------------------------------------------------------------
+
 
 def test_small_hole_is_closed(tmp_path):
     mesh = _box()
@@ -65,13 +68,33 @@ def test_sliver_triangle_that_closes_the_surface_is_kept(tmp_path):
     10 mm cube whose front face has an extra vertex M in the middle of its top
     edge; a zero-area sliver (A, M, B) closes the seam against the top face.
     """
-    v = [(0, 0, 10), (10, 0, 10), (10, 10, 10), (0, 10, 10),   # A B C D (top)
-         (0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0),       # E F G H (bottom)
-         (5, 0, 10)]                                           # M, on edge AB
-    f = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6),           # top, bottom
-         (4, 5, 8), (5, 1, 8), (4, 8, 0),                      # front, split at M
-         (6, 7, 3), (6, 3, 2), (7, 4, 0), (7, 0, 3), (5, 6, 2), (5, 2, 1),
-         (0, 8, 1)]                                            # the zero-area sliver
+    v = [
+        (0, 0, 10),
+        (10, 0, 10),
+        (10, 10, 10),
+        (0, 10, 10),  # A B C D (top)
+        (0, 0, 0),
+        (10, 0, 0),
+        (10, 10, 0),
+        (0, 10, 0),  # E F G H (bottom)
+        (5, 0, 10),
+    ]  # M, on edge AB
+    f = [
+        (0, 1, 2),
+        (0, 2, 3),
+        (4, 6, 5),
+        (4, 7, 6),  # top, bottom
+        (4, 5, 8),
+        (5, 1, 8),
+        (4, 8, 0),  # front, split at M
+        (6, 7, 3),
+        (6, 3, 2),
+        (7, 4, 0),
+        (7, 0, 3),
+        (5, 6, 2),
+        (5, 2, 1),
+        (0, 8, 1),
+    ]  # the zero-area sliver
     mesh = trimesh.Trimesh(vertices=v, faces=f, process=False)
     part = Part(_save(tmp_path, mesh))
     assert part.report.volume == pytest.approx(1000)
@@ -109,6 +132,7 @@ def test_multiple_bodies(tmp_path):
 
 # --- units, placement, build volume ----------------------------------------
 
+
 def test_tiny_model_warns_about_units(tmp_path):
     part = Part(_save(tmp_path, _box((0.8, 0.8, 0.8))))
     assert any("--scale 25.4" in w for w in part.report.warnings)
@@ -140,6 +164,7 @@ def test_model_thinner_than_a_layer(tmp_path):
 
 # --- slicing details found on real parts -----------------------------------
 
+
 def test_region_too_small_to_hatch(tmp_path):
     """PySLM's own Hatcher crashes when no hatch line crosses a fill region."""
     part = Part(_save(tmp_path, _box((0.8, 0.8, 0.8))))
@@ -154,8 +179,7 @@ def test_slice_job_returns_report(tmp_path):
     assert result.layers and result.report.repairs
 
 
-@pytest.mark.parametrize("kwargs", [dict(scale=0), dict(build_volume=(10, 10)),
-                                    dict(build_volume=(10, 0, 10))])
+@pytest.mark.parametrize("kwargs", [dict(scale=0), dict(build_volume=(10, 10)), dict(build_volume=(10, 0, 10))])
 def test_config_rejects_bad_placement(kwargs):
     with pytest.raises(ValueError):
         SliceConfig(**kwargs)
@@ -163,11 +187,14 @@ def test_config_rejects_bad_placement(kwargs):
 
 # --- command line -----------------------------------------------------------
 
+
 def test_cli_reports_model_and_repairs(tmp_path, capsys):
     mesh = _box()
     mesh.invert()
-    assert main([_save(tmp_path, mesh), "-o", str(tmp_path / "x.cli"), "--layer", "1",
-                 "--build-volume", "50", "50", "50"]) == 0
+    assert (
+        main([_save(tmp_path, mesh), "-o", str(tmp_path / "x.cli"), "--layer", "1", "--build-volume", "50", "50", "50"])
+        == 0
+    )
     out = capsys.readouterr().out
     assert "Model: 20.0 x 20.0 x 20.0 mm, 8000 mm^3, 12 triangles, 1 body" in out
     assert "repaired: fixed inside-out" in out
@@ -181,11 +208,12 @@ def test_cli_mesh_error_exits_cleanly(tmp_path, capsys):
 def test_files_referenced_inside_a_model_are_never_opened(tmp_path, monkeypatch):
     """An OBJ may name a material file anywhere - even \\\\host\\share - and must not reach it."""
     import trimesh.resolvers
+
     opened = []
     monkeypatch.setattr(trimesh.resolvers.FilePathResolver, "get", lambda self, name: opened.append(name))
     obj = tmp_path / "evil.obj"
-    obj.write_text("mtllib \\\\attacker\\share\\x.mtl\n"
-                   "v 0 0 0\nv 10 0 0\nv 0 10 0\nv 0 0 10\n"
-                   "f 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n")
+    obj.write_text(
+        "mtllib \\\\attacker\\share\\x.mtl\nv 0 0 0\nv 10 0 0\nv 0 10 0\nv 0 0 10\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+    )
     part = Part(str(obj))
     assert part.report.triangles == 4 and opened == []

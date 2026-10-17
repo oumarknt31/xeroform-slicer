@@ -1,4 +1,5 @@
 """Pipeline API used by the GUI: slice without writing, progress, export later."""
+
 import pytest
 import trimesh
 
@@ -40,5 +41,4 @@ def test_raising_from_progress_cancels(cube):
             raise Stop
 
     with pytest.raises(Stop):
-        slice_build([cube, cube], None, SliceConfig(layer_thickness=1, build_volume=(50, 50, 50)),
-                    progress=stop)
+        slice_build([cube, cube], None, SliceConfig(layer_thickness=1, build_volume=(50, 50, 50)), progress=stop)

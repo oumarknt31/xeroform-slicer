@@ -6,23 +6,23 @@ zoom, and the cursor position shown in mm. LayerView can also play back the
 laser tracing the layer. StackView draws the sliced contours stacked in 3D; drag
 to orbit. All colours come from the theme.
 """
+
 from __future__ import annotations
 import math
 
 import numpy as np
 from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import (QColor, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
-                           QTransform)
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient, QTransform
 from PySide6.QtWidgets import QToolTip, QWidget
 
 from ..layers import Layer
 from . import theme
 
 LEVELS = ("#2563eb", "#ea580c", "#059669", "#7c3aed", "#d97706", "#db2777")
-MARGIN = 28                       # px around the fitted view
+MARGIN = 28  # px around the fitted view
 GRID_STEPS = (0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000)
-MIN_GRID_PX = 36                  # grid lines at least this far apart on screen
-SCAN_SECONDS = 4.0                # length of one layer's laser playback
+MIN_GRID_PX = 36  # grid lines at least this far apart on screen
+SCAN_SECONDS = 4.0  # length of one layer's laser playback
 FPS = 30
 
 
@@ -42,8 +42,11 @@ def _alpha(color: str, a: int) -> QColor:
 
 def _mix(a: str, b: str, t: float) -> QColor:
     ca, cb = QColor(a), QColor(b)
-    return QColor(round(ca.red() + (cb.red() - ca.red()) * t), round(ca.green() + (cb.green() - ca.green()) * t),
-                  round(ca.blue() + (cb.blue() - ca.blue()) * t))
+    return QColor(
+        round(ca.red() + (cb.red() - ca.red()) * t),
+        round(ca.green() + (cb.green() - ca.green()) * t),
+        round(ca.blue() + (cb.blue() - ca.blue()) * t),
+    )
 
 
 def paint_canvas(p: QPainter, widget: QWidget) -> None:
@@ -273,10 +276,14 @@ class LayerView(PlateView):
         """World-space drawing data for layer i, cached."""
         if i not in self._cache:
             layer = self.layers[i]
-            contours = [(QPolygonF([QPointF(x, y) for x, y in np.asarray(c.points)]), c.is_hole)
-                        for c in layer.contours]
-            segs = (np.concatenate([np.asarray(h.segments).reshape(-1, 2, 2) for h in layer.hatches])
-                    if layer.hatches else np.empty((0, 2, 2)))
+            contours = [
+                (QPolygonF([QPointF(x, y) for x, y in np.asarray(c.points)]), c.is_hole) for c in layer.contours
+            ]
+            segs = (
+                np.concatenate([np.asarray(h.segments).reshape(-1, 2, 2) for h in layer.hatches])
+                if layer.hatches
+                else np.empty((0, 2, 2))
+            )
             hatches = [QLineF(a[0], a[1], b[0], b[1]) for a, b in segs]
             # laser-off jumps, in scan order: contours first, then hatches (as exported)
             starts = [np.asarray(c.points)[0] for c in layer.contours] + list(segs[:, 0])
@@ -303,7 +310,7 @@ class LayerView(PlateView):
             k = n_c + len(hatches)
         else:
             k = int(self._reveal * (n_c + len(hatches)))
-        shown_c, shown_h = contours[:min(k, n_c)], hatches[:max(0, k - n_c)]
+        shown_c, shown_h = contours[: min(k, n_c)], hatches[: max(0, k - n_c)]
 
         if self.show_travel and travel and self._reveal is None:
             p.setPen(_pen(t["muted"], 0, Qt.DashLine))
@@ -352,8 +359,7 @@ class LayoutView(PlateView):
         super().__init__(parent)
         self.items: list[tuple[QRectF, str, str, int]] = []  # rect mm, name, detail, level
 
-    def set_items(self, items: list[tuple[QRectF, str, str, int]],
-                  plate: tuple[float, float] | None = None) -> None:
+    def set_items(self, items: list[tuple[QRectF, str, str, int]], plate: tuple[float, float] | None = None) -> None:
         # draw lower levels first so stacked parts sit on top
         self.items, self.plate = sorted(items, key=lambda it: it[3]), plate
         self.refresh_bounds()
@@ -369,8 +375,12 @@ class LayoutView(PlateView):
             item = self.item_at(QPointF(e.pos()))
             if item:
                 rect, name, detail, _ = item
-                QToolTip.showText(e.globalPos(), f"{name}\n{detail}\n{rect.width():.1f} × {rect.height():.1f} mm "
-                                                 f"at x {rect.left():.1f}, y {rect.top():.1f}", self)
+                QToolTip.showText(
+                    e.globalPos(),
+                    f"{name}\n{detail}\n{rect.width():.1f} × {rect.height():.1f} mm "
+                    f"at x {rect.left():.1f}, y {rect.top():.1f}",
+                    self,
+                )
             else:
                 QToolTip.hideText()
             return True
@@ -417,7 +427,7 @@ class StackView(QWidget):
     as a cut through the part.
     """
 
-    MAX_POINTS = 60000          # points drawn per frame at rest
+    MAX_POINTS = 60000  # points drawn per frame at rest
     MAX_POINTS_DRAGGING = 18000  # ... and while orbiting, to stay smooth
     MAX_CONTOUR_POINTS = 160
 

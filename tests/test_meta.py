@@ -1,4 +1,5 @@
 """Project metadata: one version number, license files present."""
+
 import importlib.metadata
 import pathlib
 

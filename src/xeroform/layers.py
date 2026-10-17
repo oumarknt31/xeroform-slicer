@@ -12,6 +12,7 @@ counter-clockwise, holes run clockwise.
 Laser parameters are stored in physical units (W, mm/s). Converting them to what
 a controller expects (percent, PWM duty, G-code S/F words) is the exporter's job.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
@@ -26,6 +27,7 @@ def signed_area(points: np.ndarray) -> float:
 @dataclass(frozen=True)
 class ScanParams:
     """How the laser scans one kind of vector: power (W) and speed (mm/s)."""
+
     power: float
     speed: float
 
@@ -39,6 +41,7 @@ class ScanParams:
 @dataclass
 class Contour:
     """A closed outline of a layer. `points` is an (N, 2) array of (x, y)."""
+
     points: np.ndarray
     params: ScanParams | None = None
 
@@ -55,6 +58,7 @@ class Hatch:
     `segments` is an (M, 2, 2) array: M line segments, each [[x1, y1], [x2, y2]].
     Every segment is one 'laser on, move start -> end' vector.
     """
+
     segments: np.ndarray
     params: ScanParams | None = None
 
@@ -62,6 +66,7 @@ class Hatch:
 @dataclass
 class Layer:
     """One printed layer at height `z` (mm)."""
+
     z: float
     contours: list[Contour] = field(default_factory=list)
     hatches: list[Hatch] = field(default_factory=list)

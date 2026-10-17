@@ -1,4 +1,5 @@
 """Playback in the viewer: the laser tracing a layer, and the layers as a flip-book."""
+
 from __future__ import annotations
 
 from . import theme

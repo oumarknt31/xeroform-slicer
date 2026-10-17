@@ -4,6 +4,7 @@ This module is the ONLY place PySLM geometry is translated into XeroForm's own
 data model. Keeping the translation here is what makes the rest of the engine
 independent of PySLM.
 """
+
 from __future__ import annotations
 from typing import Callable
 import numpy as np
@@ -15,9 +16,13 @@ from .laser import LaserSettings
 from .scan_order import order_segments
 
 
-def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
-               laser: LaserSettings | None = None,
-               progress: Callable[[int, int], None] | None = None) -> list[Layer]:
+def slice_part(
+    part: Part,
+    settings: HatchSettings,
+    layer_thickness: float,
+    laser: LaserSettings | None = None,
+    progress: Callable[[int, int], None] | None = None,
+) -> list[Layer]:
     """Slice the whole part, bottom to top, returning XeroForm Layers.
 
     With `laser`, every contour and hatch carries its scan parameters. Empty
@@ -77,8 +82,7 @@ def _order_hatches(layer: Layer, mode: str) -> None:
             pos = h.segments[-1, 1]
 
 
-def _orient_contours(contour_coords: list[np.ndarray],
-                     params: ScanParams | None = None) -> list[Contour]:
+def _orient_contours(contour_coords: list[np.ndarray], params: ScanParams | None = None) -> list[Contour]:
     """Re-orient PySLM contours to XeroForm's convention (outer CCW, holes CW).
 
     PySLM's offsetting gives outers and holes opposite windings, but which one is

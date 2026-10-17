@@ -1,11 +1,21 @@
 """Small building blocks for the window: cards, stat tiles, toasts, chips, segments."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from . import theme
@@ -69,8 +79,9 @@ class Card(QFrame):
 
     def restyle(self) -> None:
         if self.collapsible:
-            self.header.setIcon(theme.icon("chevron-down" if self.header.isChecked() else "chevron-right",
-                                           theme.current()["muted"]))
+            self.header.setIcon(
+                theme.icon("chevron-down" if self.header.isChecked() else "chevron-right", theme.current()["muted"])
+            )
 
 
 class StatTile(QFrame):

@@ -4,6 +4,7 @@ Expected problems (a bad model, parts that don't fit) come back as a plain
 message; anything else is logged with its traceback and reported as unexpected,
 so the window never dies with the work.
 """
+
 from __future__ import annotations
 import gc
 import logging
@@ -30,7 +31,7 @@ class Task(QThread):
 
     progressed = Signal(str, int, int)  # stage, done, total (total 0 = unknown)
     succeeded = Signal(object)
-    failed = Signal(str, str)           # message, technical details ("" when expected)
+    failed = Signal(str, str)  # message, technical details ("" when expected)
 
     def __init__(self, fn: Callable, parent=None):
         super().__init__(parent)

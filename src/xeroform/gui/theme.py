@@ -4,6 +4,7 @@ Two themes: dark graphite (the default) and a light theme in soft greys, both
 with a single orange accent. Widgets and views read their colours from
 `current()`; `apply()` switches theme for the whole app.
 """
+
 from __future__ import annotations
 import atexit
 import os
@@ -18,26 +19,76 @@ ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 ACCENT = "#ff6b1a"  # laser orange
 
 DARK = {  # graphite
-    "bg": "#0b0d10", "bg2": "#0e1115", "header": "#12151a", "header2": "#0d1014",
-    "surface": "#13161b", "surface_hi": "#181c22", "surface2": "#1c2027", "raised": "#232831",
-    "base": "#0e1115", "canvas": "#08090c", "canvas_hi": "#121720", "plate": "#11151b",
-    "border": "#242931", "border_hi": "#2f3540", "text": "#e9ebef", "muted": "#8b93a1",
-    "faint": "#4e5664", "accent": ACCENT, "accent2": "#ff8a3d", "accent_hover": "#ff8540",
-    "accent_glow": "#ffb37a", "accent_text": "#170a02", "accent_soft": "#2a1a10",
-    "accent_line": "#6a3314", "hole": "#5aa9ff", "hatch": "#8f98a8", "grid": "#151a21",
-    "warn_bg": "#2a2010", "warn_border": "#5c4614", "warn_text": "#f5c56b", "ok": "#3ddc97",
-    "toast_bg": "#1d2229", "toast_text": "#e9ebef", "shadow": "#000000",
+    "bg": "#0b0d10",
+    "bg2": "#0e1115",
+    "header": "#12151a",
+    "header2": "#0d1014",
+    "surface": "#13161b",
+    "surface_hi": "#181c22",
+    "surface2": "#1c2027",
+    "raised": "#232831",
+    "base": "#0e1115",
+    "canvas": "#08090c",
+    "canvas_hi": "#121720",
+    "plate": "#11151b",
+    "border": "#242931",
+    "border_hi": "#2f3540",
+    "text": "#e9ebef",
+    "muted": "#8b93a1",
+    "faint": "#4e5664",
+    "accent": ACCENT,
+    "accent2": "#ff8a3d",
+    "accent_hover": "#ff8540",
+    "accent_glow": "#ffb37a",
+    "accent_text": "#170a02",
+    "accent_soft": "#2a1a10",
+    "accent_line": "#6a3314",
+    "hole": "#5aa9ff",
+    "hatch": "#8f98a8",
+    "grid": "#151a21",
+    "warn_bg": "#2a2010",
+    "warn_border": "#5c4614",
+    "warn_text": "#f5c56b",
+    "ok": "#3ddc97",
+    "toast_bg": "#1d2229",
+    "toast_text": "#e9ebef",
+    "shadow": "#000000",
 }
 LIGHT = {  # soft greys, never white
-    "bg": "#e3e5e9", "bg2": "#dadde2", "header": "#eceef1", "header2": "#e3e6ea",
-    "surface": "#eceef1", "surface_hi": "#f2f3f5", "surface2": "#e1e4e9", "raised": "#d8dce2",
-    "base": "#e7e9ed", "canvas": "#d3d7de", "canvas_hi": "#e4e7eb", "plate": "#e8eaee",
-    "border": "#c8cdd5", "border_hi": "#f5f6f8", "text": "#15181d", "muted": "#5b6370",
-    "faint": "#9aa1ab", "accent": "#e85d0c", "accent2": "#f57a2b", "accent_hover": "#d14f05",
-    "accent_glow": "#f7a066", "accent_text": "#fff8f2", "accent_soft": "#f3d8c5",
-    "accent_line": "#eaa77c", "hole": "#1f6fd1", "hatch": "#464d58", "grid": "#cbd0d7",
-    "warn_bg": "#f1e2c1", "warn_border": "#d6b066", "warn_text": "#6b4300", "ok": "#14904f",
-    "toast_bg": "#1d2229", "toast_text": "#e9ebef", "shadow": "#59606b",
+    "bg": "#e3e5e9",
+    "bg2": "#dadde2",
+    "header": "#eceef1",
+    "header2": "#e3e6ea",
+    "surface": "#eceef1",
+    "surface_hi": "#f2f3f5",
+    "surface2": "#e1e4e9",
+    "raised": "#d8dce2",
+    "base": "#e7e9ed",
+    "canvas": "#d3d7de",
+    "canvas_hi": "#e4e7eb",
+    "plate": "#e8eaee",
+    "border": "#c8cdd5",
+    "border_hi": "#f5f6f8",
+    "text": "#15181d",
+    "muted": "#5b6370",
+    "faint": "#9aa1ab",
+    "accent": "#e85d0c",
+    "accent2": "#f57a2b",
+    "accent_hover": "#d14f05",
+    "accent_glow": "#f7a066",
+    "accent_text": "#fff8f2",
+    "accent_soft": "#f3d8c5",
+    "accent_line": "#eaa77c",
+    "hole": "#1f6fd1",
+    "hatch": "#464d58",
+    "grid": "#cbd0d7",
+    "warn_bg": "#f1e2c1",
+    "warn_border": "#d6b066",
+    "warn_text": "#6b4300",
+    "ok": "#14904f",
+    "toast_bg": "#1d2229",
+    "toast_text": "#e9ebef",
+    "shadow": "#59606b",
 }
 MODES = ("dark", "light", "system")
 DEFAULT_MODE = "dark"
@@ -89,12 +140,21 @@ def apply(app, mode: str = DEFAULT_MODE) -> None:
 def _palette() -> QPalette:
     t, p = _current, QPalette()
     roles = {
-        QPalette.Window: t["bg"], QPalette.WindowText: t["text"], QPalette.Base: t["base"],
-        QPalette.AlternateBase: t["surface2"], QPalette.Text: t["text"], QPalette.Button: t["surface"],
-        QPalette.ButtonText: t["text"], QPalette.Highlight: t["accent"],
-        QPalette.HighlightedText: t["accent_text"], QPalette.ToolTipBase: t["surface"],
-        QPalette.ToolTipText: t["text"], QPalette.PlaceholderText: t["muted"], QPalette.Mid: t["border"],
-        QPalette.Midlight: t["grid"], QPalette.Link: t["accent"],
+        QPalette.Window: t["bg"],
+        QPalette.WindowText: t["text"],
+        QPalette.Base: t["base"],
+        QPalette.AlternateBase: t["surface2"],
+        QPalette.Text: t["text"],
+        QPalette.Button: t["surface"],
+        QPalette.ButtonText: t["text"],
+        QPalette.Highlight: t["accent"],
+        QPalette.HighlightedText: t["accent_text"],
+        QPalette.ToolTipBase: t["surface"],
+        QPalette.ToolTipText: t["text"],
+        QPalette.PlaceholderText: t["muted"],
+        QPalette.Mid: t["border"],
+        QPalette.Midlight: t["grid"],
+        QPalette.Link: t["accent"],
     }
     for role, value in roles.items():
         p.setColor(role, QColor(value))
@@ -127,9 +187,12 @@ def _icon_file(name: str, color: str) -> str:
 
 
 def _stylesheet() -> str:
-    t = dict(_current, check=_icon_file("check-mark", _current["accent_text"]),
-             chevron=_icon_file("chevron-down", _current["muted"]),
-             up=_icon_file("chevron-up", _current["muted"]))
+    t = dict(
+        _current,
+        check=_icon_file("check-mark", _current["accent_text"]),
+        chevron=_icon_file("chevron-down", _current["muted"]),
+        up=_icon_file("chevron-up", _current["muted"]),
+    )
     return """
 * {{ outline: 0; }}
 QWidget {{ color: {text}; font-size: 13px; }}
@@ -258,19 +321,19 @@ QMessageBox {{ background: {surface}; }}
 _ICONS = {
     "open": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     "save": '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'
-            '<path d="M7 3v5h8V3M7 21v-7h10v7"/>',
+    '<path d="M7 3v5h8V3M7 21v-7h10v7"/>',
     "add": '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
     "slice": '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/>',
     "export": '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
     "drop": '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
     "play": '<path fill="C" stroke="none" d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>',
     "pause": '<rect fill="C" stroke="none" x="6" y="4" width="4" height="16" rx="1"/>'
-             '<rect fill="C" stroke="none" x="14" y="4" width="4" height="16" rx="1"/>',
+    '<rect fill="C" stroke="none" x="14" y="4" width="4" height="16" rx="1"/>',
     "laser": '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19"/>',
     "film": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
     "fit": '<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>',
     "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2'
-           'M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    'M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     "moon": '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
     "auto": '<circle cx="12" cy="12" r="9"/><path fill="C" d="M12 3a9 9 0 0 1 0 18z"/>',
     "trash": '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
@@ -280,7 +343,7 @@ _ICONS = {
     "chevron-up": '<path d="M6 15l6-6 6 6"/>',
     "cube": '<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>',
     "layout": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>'
-              '<rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    '<rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     "warning": '<path d="M12 3.5l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.01"/>',
     "ok": '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/>',
     "check-mark": '<path stroke-width="3" d="M5 12.5l4.5 4.5L19 7.5"/>',
@@ -297,8 +360,10 @@ def icon(name: str, color: str | None = None) -> QIcon:
     key = (name, color)
     if key not in _icon_cache:
         body = _ICONS[name].replace('fill="C"', f'fill="{color}"')
-        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
-               f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{body}</svg>')
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
+            f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{body}</svg>'
+        )
         renderer = QSvgRenderer(QByteArray(svg.encode()))
         ic = QIcon()
         for size in (16, 20, 24, 32, 48, 64):

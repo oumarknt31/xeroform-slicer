@@ -1,4 +1,5 @@
 """Hatch/contour settings, wrapped around PySLM's Hatcher."""
+
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
@@ -34,6 +35,7 @@ class HatchSettings:
     num_inner/outer       : number of contour passes tracing each outline.
     scan_order            : "nearest", "meander" or "raster" (see scan_order.py).
     """
+
     hatch_angle: float = 67.0
     hatch_angle_increment: float = 67.0
     hatch_distance: float = 0.2
