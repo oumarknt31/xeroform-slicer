@@ -8,6 +8,9 @@ changes; this model and the exporters do not.
 
 Orientation convention (same as the CLI spec): outer outlines run
 counter-clockwise, holes run clockwise.
+
+Laser parameters are stored in physical units (W, mm/s). Converting them to what
+a controller expects (percent, PWM duty, G-code S/F words) is the exporter's job.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -20,10 +23,24 @@ def signed_area(points: np.ndarray) -> float:
     return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
 
 
+@dataclass(frozen=True)
+class ScanParams:
+    """How the laser scans one kind of vector: power (W) and speed (mm/s)."""
+    power: float
+    speed: float
+
+    def __post_init__(self):
+        if not self.power >= 0:
+            raise ValueError(f"laser power must be >= 0 W, got {self.power!r}")
+        if not self.speed > 0:
+            raise ValueError(f"scan speed must be > 0 mm/s, got {self.speed!r}")
+
+
 @dataclass
 class Contour:
     """A closed outline of a layer. `points` is an (N, 2) array of (x, y)."""
     points: np.ndarray
+    params: ScanParams | None = None
 
     @property
     def is_hole(self) -> bool:
@@ -39,6 +56,7 @@ class Hatch:
     Every segment is one 'laser on, move start -> end' vector.
     """
     segments: np.ndarray
+    params: ScanParams | None = None
 
 
 @dataclass

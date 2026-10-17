@@ -28,6 +28,6 @@ def slice_file(input_path: str, output_path: str, config: SliceConfig | None = N
         num_inner_contours=config.num_inner_contours,
         num_outer_contours=config.num_outer_contours,
     )
-    layers = slice_part(part, settings, config.layer_thickness)
+    layers = slice_part(part, settings, config.layer_thickness, config.laser_settings())
     exporter.write(layers, output_path, part.bounding_box)
     return layers

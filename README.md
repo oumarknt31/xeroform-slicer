@@ -41,7 +41,19 @@ slicerkit model.stl -o model.cli --layer 0.1 --hatch-distance 0.2 --hatch-rotati
 
 # also write an interactive layer preview (open it in any browser):
 slicerkit model.stl -o model.cli --preview model.html
+
+# laser settings (W, mm/s) - defaults are placeholders until the laser is chosen:
+slicerkit model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
+          --contour-power 4 --contour-speed 400 --jump-speed 2000
 ```
+
+Every run prints an estimated laser time (scanning only - no recoating or
+heating) and the fill **energy density** `P / (v * h)` in J/mm², the main number
+to tune per material.
+
+Laser settings are stored in physical units on each contour/hatch
+(`ScanParams`). Each exporter converts them to what its controller wants
+(percent, PWM, G-code `S`/`F`); standard ASCII CLI has no field for them.
 
 The preview steps through layers (slider or ← →) and shows outlines (holes in
 blue), hatch fill, laser-off travel moves and scan order, plus per-layer
@@ -68,7 +80,8 @@ src/slicerkit/
   part.py        # load + validate mesh (wraps PySLM)
   slicing.py     # part -> layers   (the PySLM -> slicerkit translation lives here)
   hatching.py    # hatch/contour settings (wraps PySLM Hatcher)
-  layers.py      # slicerkit's own Layer / Contour / Hatch data model
+  layers.py      # slicerkit's own Layer / Contour / Hatch / ScanParams data model
+  laser.py       # LaserSettings, path lengths, scan-time estimate
   config.py      # SliceConfig + material/machine profiles
   export/
     base.py      # Exporter interface
@@ -87,6 +100,7 @@ examples/        # sample_cube.py
 - [x] contours follow the CLI orientation convention (outer CCW / flag 1, holes CW / flag 0)
 - [x] hatch angle rotates per layer (`hatch_angle_increment`, default 67°; 0 = fixed)
 - [x] interactive HTML layer preview (`--preview`)
+- [x] laser power / speed per vector type, scan-time estimate, energy density
 - [ ] confirm the exact `.cli` dialect (units, ASCII vs binary) with the STM32 firmware
 - [ ] tune layer thickness / hatch parameters for nylon
 - [ ] 3D part nesting; PySide/Qt GUI on top of the engine

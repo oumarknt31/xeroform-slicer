@@ -9,8 +9,10 @@ engine stays decoupled and portable.
 """
 from .config import SliceConfig
 from .pipeline import slice_file
-from .layers import Layer, Contour, Hatch
+from .layers import Layer, Contour, Hatch, ScanParams
+from .laser import LaserSettings, estimate_scan_time
 from .preview import write_preview
 
 __version__ = "0.1.0"
-__all__ = ["SliceConfig", "slice_file", "Layer", "Contour", "Hatch", "write_preview"]
+__all__ = ["SliceConfig", "slice_file", "Layer", "Contour", "Hatch", "ScanParams",
+           "LaserSettings", "estimate_scan_time", "write_preview"]

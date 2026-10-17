@@ -9,11 +9,21 @@ import html
 import json
 import numpy as np
 
-from .layers import Layer
+from .layers import Layer, ScanParams
+from .laser import path_lengths, layer_scan_time
 
 
-def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3) -> dict:
-    """Layer geometry as plain JSON-ready data (every `every`-th layer)."""
+def _params(items) -> list[float] | None:
+    p: ScanParams | None = items[0].params if items else None
+    return [p.power, p.speed] if p else None
+
+
+def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3,
+                 jump_speed: float | None = None) -> dict:
+    """Layer geometry as plain JSON-ready data (every `every`-th layer).
+
+    With `jump_speed` (mm/s) and laser params on the layers, scan times are included.
+    """
     if every < 1:
         raise ValueError(f"every must be >= 1, got {every!r}")
     shown = layers[::every]
@@ -32,23 +42,42 @@ def preview_data(layers: list[Layer], every: int = 1, decimals: int = 3) -> dict
             hatches = segs.ravel().tolist()
         else:
             hatches = []
-        out.append({"z": round(float(layer.z), 6), "contours": contours, "hatches": hatches})
+        lengths = path_lengths(layer)
+        stats = {"contour_mm": lengths.contour, "hatch_mm": lengths.hatch, "jump_mm": lengths.jump,
+                 "time_s": _time_or_none(layer, jump_speed)}
+        out.append({"z": round(float(layer.z), 6), "contours": contours, "hatches": hatches,
+                    "params": {"contour": _params(layer.contours), "hatch": _params(layer.hatches)},
+                    "stats": stats})
 
     if all_pts:
         pts = np.concatenate(all_pts)
         bounds = [*pts.min(axis=0).tolist(), *pts.max(axis=0).tolist()]
     else:
         bounds = [0.0, 0.0, 1.0, 1.0]
-    return {"bounds": bounds, "total_layers": len(layers), "every": every, "layers": out}
+    times = [_time_or_none(layer, jump_speed) for layer in layers]
+    total = None if None in times or not times else sum(times)
+    return {"bounds": bounds, "total_layers": len(layers), "every": every,
+            "total_time_s": total, "layers": out}
+
+
+def _time_or_none(layer: Layer, jump_speed: float | None) -> float | None:
+    if jump_speed is None:
+        return None
+    try:
+        return layer_scan_time(layer, jump_speed)
+    except ValueError:  # layer has no laser params
+        return None
 
 
 def write_preview(layers: list[Layer], path: str, title: str = "slicerkit preview",
-                  every: int = 1) -> None:
+                  every: int = 1, jump_speed: float | None = None) -> None:
     """Write an interactive HTML preview of `layers` to `path`.
 
-    every : keep every n-th layer only, to keep the file small for big parts.
+    every      : keep every n-th layer only, to keep the file small for big parts.
+    jump_speed : laser-off speed (mm/s); enables the scan-time estimates.
     """
-    data = json.dumps(preview_data(layers, every=every), separators=(",", ":"))
+    data = json.dumps(preview_data(layers, every=every, jump_speed=jump_speed),
+                      separators=(",", ":"))
     page = (_TEMPLATE
             .replace("__TITLE__", html.escape(title))
             .replace("__DATA__", data.replace("</", "<\\/")))
@@ -181,12 +210,15 @@ _TEMPLATE = r"""<!doctype html>
     ctx.fillRect(X(bx0), Y(by1), (bx1 - bx0) * view.s, (by1 - by0) * view.s);
 
     const H = L.hatches, n = H.length / 4;
-    if (toggles[2].checked && n > 1) {
+    if (toggles[2].checked) {
+      // laser-off jumps in scan order: contours first, then hatches (as exported)
+      const runs = L.contours.map(c => [c.pts[0], c.pts[1], c.pts[c.pts.length - 2], c.pts[c.pts.length - 1]]);
+      for (let i = 0; i < n; i++) runs.push(H.slice(4 * i, 4 * i + 4));
       ctx.strokeStyle = colors.travel; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      for (let i = 0; i < n - 1; i++) {
-        ctx.moveTo(X(H[4 * i + 2]), Y(H[4 * i + 3]));
-        ctx.lineTo(X(H[4 * i + 4]), Y(H[4 * i + 5]));
+      for (let i = 1; i < runs.length; i++) {
+        ctx.moveTo(X(runs[i - 1][2]), Y(runs[i - 1][3]));
+        ctx.lineTo(X(runs[i][0]), Y(runs[i][1]));
       }
       ctx.stroke(); ctx.setLineDash([]);
     }
@@ -223,17 +255,13 @@ _TEMPLATE = r"""<!doctype html>
     }
   }
 
-  function segLength(H, from, to) {   // sum of |p_to - p_from| over vectors
-    let s = 0;
-    for (let i = 0; i < H.length; i += 4) s += Math.hypot(H[i + to] - H[i + from], H[i + to + 1] - H[i + from + 1]);
-    return s;
+  function fmtTime(sec) {
+    if (sec == null) return null;
+    const t = Math.round(sec), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+    return h ? `${h}h ${String(m).padStart(2, "0")}m` : m ? `${m}m ${String(s).padStart(2, "0")}s` : `${(+sec).toFixed(1)} s`;
   }
 
-  function travelLength(H) {
-    let s = 0;
-    for (let i = 4; i < H.length; i += 4) s += Math.hypot(H[i] - H[i - 2], H[i + 1] - H[i - 1]);
-    return s;
-  }
+  const fmtParams = p => p ? `${+p[0].toFixed(2)} W · ${+p[1].toFixed(0)} mm/s` : null;
 
   function update() {
     const L = D.layers[idx];
@@ -247,10 +275,14 @@ _TEMPLATE = r"""<!doctype html>
       ["Outlines", `${L.contours.length - holes}`],
       ["Holes", `${holes}`],
       ["Hatch vectors", `${L.hatches.length / 4}`],
-      ["Laser-on", `${segLength(L.hatches, 0, 2).toFixed(0)} mm`],
-      ["Travel", `${travelLength(L.hatches).toFixed(0)} mm`],
+      ["Laser-on", `${(L.stats.contour_mm + L.stats.hatch_mm).toFixed(0)} mm`],
+      ["Travel", `${L.stats.jump_mm.toFixed(0)} mm`],
+      ["Layer time", fmtTime(L.stats.time_s)],
+      ["Total time", fmtTime(D.total_time_s)],
+      ["Outline laser", fmtParams(L.params.contour)],
+      ["Fill laser", fmtParams(L.params.hatch)],
       ["Footprint", `${(bx1 - bx0).toFixed(1)} × ${(by1 - by0).toFixed(1)} mm`],
-    ];
+    ].filter(([, v]) => v != null);
     $("stats").innerHTML = stats.map(([k, v]) => `<span><span class="muted">${k}</span> <b>${v}</b></span>`).join("");
     draw();
   }

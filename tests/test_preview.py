@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import trimesh
 
-from slicerkit import SliceConfig, slice_file, write_preview
+from slicerkit import SliceConfig, estimate_scan_time, slice_file, write_preview
 from slicerkit.__main__ import main
 from slicerkit.layers import Layer
 from slicerkit.preview import preview_data
@@ -53,9 +53,24 @@ def test_preview_every(ring_layers):
 
 
 def test_preview_handles_empty_layers():
-    data = preview_data([Layer(z=0.1)])
-    assert data["layers"] == [{"z": 0.1, "contours": [], "hatches": []}]
+    data = preview_data([Layer(z=0.1)], jump_speed=1000)
+    layer = data["layers"][0]
+    assert (layer["z"], layer["contours"], layer["hatches"]) == (0.1, [], [])
+    assert layer["params"] == {"contour": None, "hatch": None}
+    assert layer["stats"]["time_s"] == 0
     assert data["bounds"] == [0.0, 0.0, 1.0, 1.0]
+
+
+def test_preview_includes_laser_params_and_time(ring_layers):
+    data = preview_data(ring_layers, jump_speed=2000)
+    cfg = SliceConfig()
+    for pl in data["layers"]:
+        assert pl["params"]["contour"] == [cfg.contour_power, cfg.contour_speed]
+        assert pl["params"]["hatch"] == [cfg.hatch_power, cfg.hatch_speed]
+    assert data["total_time_s"] == pytest.approx(estimate_scan_time(ring_layers, 2000))
+    assert data["total_time_s"] == pytest.approx(sum(pl["stats"]["time_s"] for pl in data["layers"]))
+    # without a jump speed there is no time estimate
+    assert preview_data(ring_layers)["total_time_s"] is None
 
 
 def test_cli_writes_preview(tmp_path):

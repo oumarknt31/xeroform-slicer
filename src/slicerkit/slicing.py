@@ -9,11 +9,16 @@ import numpy as np
 
 from .part import Part
 from .hatching import HatchSettings
-from .layers import Layer, Contour, Hatch, signed_area
+from .layers import Layer, Contour, Hatch, ScanParams, signed_area
+from .laser import LaserSettings
 
 
-def slice_part(part: Part, settings: HatchSettings, layer_thickness: float) -> list[Layer]:
-    """Slice the whole part, bottom to top, returning slicerkit Layers."""
+def slice_part(part: Part, settings: HatchSettings, layer_thickness: float,
+               laser: LaserSettings | None = None) -> list[Layer]:
+    """Slice the whole part, bottom to top, returning slicerkit Layers.
+
+    With `laser`, every contour and hatch carries its scan parameters.
+    """
     hatcher = settings.make_hatcher()
     layers: list[Layer] = []
     z_max = part.z_max
@@ -24,12 +29,12 @@ def slice_part(part: Part, settings: HatchSettings, layer_thickness: float) -> l
         if boundaries:  # skip empty slices at the extremes
             hatcher.hatchAngle = settings.angle_for_layer(len(layers))
             pyslm_layer = hatcher.hatch(boundaries)
-            layers.append(_to_layer(pyslm_layer, z))
+            layers.append(_to_layer(pyslm_layer, z, laser))
         i += 1
     return layers
 
 
-def _to_layer(pyslm_layer, z: float) -> Layer:
+def _to_layer(pyslm_layer, z: float, laser: LaserSettings | None = None) -> Layer:
     """Translate one PySLM layer into a slicerkit Layer (the wrapper boundary)."""
     contour_coords: list[np.ndarray] = []
     hatches: list[Hatch] = []
@@ -41,11 +46,13 @@ def _to_layer(pyslm_layer, z: float) -> Layer:
         elif kind == "HatchGeometry":
             # PySLM stores hatch points as consecutive start/end pairs.
             segments = coords.reshape(-1, 2, 2)
-            hatches.append(Hatch(segments=segments))
-    return Layer(z=z, contours=_orient_contours(contour_coords), hatches=hatches)
+            hatches.append(Hatch(segments=segments, params=laser and laser.hatch))
+    contours = _orient_contours(contour_coords, laser and laser.contour)
+    return Layer(z=z, contours=contours, hatches=hatches)
 
 
-def _orient_contours(contour_coords: list[np.ndarray]) -> list[Contour]:
+def _orient_contours(contour_coords: list[np.ndarray],
+                     params: ScanParams | None = None) -> list[Contour]:
     """Re-orient PySLM contours to slicerkit's convention (outer CCW, holes CW).
 
     PySLM's offsetting gives outers and holes opposite windings, but which one is
@@ -61,5 +68,5 @@ def _orient_contours(contour_coords: list[np.ndarray]) -> list[Contour]:
         is_hole = np.sign(area) != outer_sign
         if (area < 0) != is_hole:  # winding doesn't match the convention
             coords = coords[::-1].copy()
-        contours.append(Contour(points=coords))
+        contours.append(Contour(points=coords, params=params))
     return contours

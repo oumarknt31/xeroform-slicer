@@ -3,6 +3,9 @@
 NOTE: the exact CLI dialect (units, ASCII vs binary, header keywords, the
 POLYLINE direction flag) must be confirmed against the STM32 firmware. Those
 knobs live here so matching the real machine is a change to this one file.
+
+Standard CLI has no fields for laser power or speed, so the ScanParams on each
+contour/hatch are not written here; the machine must get them another way.
 """
 from __future__ import annotations
 import numpy as np

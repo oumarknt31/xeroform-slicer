@@ -6,6 +6,7 @@ import os
 from .pipeline import slice_file
 from .config import SliceConfig
 from .preview import write_preview
+from .laser import estimate_scan_time
 
 
 def main(argv=None) -> int:
@@ -21,6 +22,14 @@ def main(argv=None) -> int:
     ap.add_argument("--hatch-rotation", type=float, default=67.0,
                     help="hatch angle added per layer in deg (0 = fixed)")
     ap.add_argument("--units", type=float, default=1.0, help="mm per .cli coordinate unit")
+    laser = ap.add_argument_group("laser (placeholder defaults - tune on hardware)")
+    defaults = SliceConfig()
+    laser.add_argument("--hatch-power", type=float, default=defaults.hatch_power, help="fill power in W")
+    laser.add_argument("--hatch-speed", type=float, default=defaults.hatch_speed, help="fill speed in mm/s")
+    laser.add_argument("--contour-power", type=float, default=defaults.contour_power, help="outline power in W")
+    laser.add_argument("--contour-speed", type=float, default=defaults.contour_speed, help="outline speed in mm/s")
+    laser.add_argument("--jump-speed", type=float, default=defaults.jump_speed,
+                       help="laser-off move speed in mm/s")
     ap.add_argument("--preview", metavar="HTML", help="also write an interactive layer preview (.html)")
     ap.add_argument("--preview-every", type=int, default=1, metavar="N",
                     help="keep every N-th layer in the preview (smaller file for big parts)")
@@ -35,17 +44,31 @@ def main(argv=None) -> int:
             hatch_angle=args.hatch_angle,
             hatch_angle_increment=args.hatch_rotation,
             units=args.units,
+            hatch_power=args.hatch_power,
+            hatch_speed=args.hatch_speed,
+            contour_power=args.contour_power,
+            contour_speed=args.contour_speed,
+            jump_speed=args.jump_speed,
         )
     except ValueError as e:
         ap.error(str(e))
     layers = slice_file(args.input, args.output, cfg)
     vectors = sum(l.num_hatch_vectors for l in layers)
     print(f"Sliced {len(layers)} layers ({vectors} hatch vectors) -> {args.output}")
+    seconds = estimate_scan_time(layers, cfg.jump_speed)
+    print(f"Estimated laser time: {_hms(seconds)} (scanning only; excludes recoating/heating)")
+    print(f"Hatch energy density: {cfg.hatch_energy_density:.4f} J/mm^2")
     if args.preview:
         write_preview(layers, args.preview, title=os.path.basename(args.input),
-                      every=args.preview_every)
+                      every=args.preview_every, jump_speed=cfg.jump_speed)
         print(f"Preview -> {args.preview}")
     return 0
+
+
+def _hms(seconds: float) -> str:
+    m, s = divmod(round(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h}h {m:02d}m {s:02d}s" if h else f"{m}m {s:02d}s"
 
 
 if __name__ == "__main__":
