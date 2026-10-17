@@ -64,3 +64,22 @@ def test_save_is_atomic(tmp_path):
     path = tmp_path / "p.slicerkit"
     Project().save(str(path))
     assert path.exists() and not (tmp_path / "p.slicerkit.tmp").exists()
+
+
+@pytest.mark.parametrize("raw", ["\\\\attacker\\share\\part.stl", "//attacker/share/part.stl",
+                                 "\\\\?\\UNC\\attacker\\share\\part.stl"])
+def test_network_paths_are_refused(tmp_path, raw):
+    path = tmp_path / "p.slicerkit"
+    path.write_text(json.dumps({"format": "slicerkit-project", "version": 1,
+                                "parts": [{"path": raw, "copies": 1}]}))
+    with pytest.raises(ProjectError, match="network location"):
+        Project.load(str(path))
+
+
+def test_local_paths_outside_the_folder_still_work(tmp_path):
+    (tmp_path / "models").mkdir()
+    proj = tmp_path / "projects"
+    proj.mkdir()
+    model = tmp_path / "models" / "part.stl"
+    Project([ProjectPart(str(model))]).save(str(proj / "p.slicerkit"))
+    assert Project.load(str(proj / "p.slicerkit")).parts[0].path == str(model)

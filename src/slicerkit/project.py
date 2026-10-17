@@ -58,10 +58,17 @@ class Project:
             raise ProjectError(f"{path} was saved by a newer slicerkit; please update.")
         base = os.path.dirname(os.path.abspath(path))
         try:
-            parts = [ProjectPart(os.path.normpath(os.path.join(base, p["path"])), int(p.get("copies", 1)))
-                     for p in data.get("parts", [])]
+            entries = [(str(p["path"]), int(p.get("copies", 1))) for p in data.get("parts", [])]
         except (KeyError, TypeError, ValueError) as e:
             raise ProjectError(f"{path} has a malformed parts list.") from e
+        # A project file may come from someone else. A network path in it would make
+        # Windows contact that host (and send the user's credentials) as soon as we
+        # check the file exists - so refuse those before touching the filesystem.
+        for raw, _ in entries:
+            if _is_network_path(raw):
+                raise ProjectError(f"{path} refers to a model on a network location ({raw}). "
+                                   "Copy the model next to the project and add it again.")
+        parts = [ProjectPart(os.path.normpath(os.path.join(base, raw)), copies) for raw, copies in entries]
         return cls(parts=parts, config=config_from_dict(data.get("settings", {})))
 
 
@@ -82,6 +89,11 @@ def config_from_dict(d: dict) -> SliceConfig:
         return SliceConfig(**values)
     except (TypeError, ValueError) as e:
         raise ProjectError(f"Invalid settings in project: {e}") from e
+
+
+def _is_network_path(path: str) -> bool:
+    """UNC / network paths: \\\\host\\share, //host/share, \\\\?\\UNC\\..."""
+    return path.replace("/", "\\").startswith("\\\\")
 
 
 def _relative(path: str, base: str) -> str:
