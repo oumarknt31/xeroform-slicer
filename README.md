@@ -21,7 +21,13 @@ Built in Python on the open-source [PySLM](https://pyslm.readthedocs.io) library
   so matching the printer's real `.cli` dialect (or adding binary CLI / OVF) is
   a new file in `export/`, nothing else.
 
-## Install
+## Download the app
+
+Ready-to-run apps for macOS, Windows and Linux are on the
+[Releases page](https://github.com/oumarknt31/xeroform-slicer/releases/latest) - no
+Python needed. The release notes explain the one-time security prompt.
+
+## Install from source
 
 ```bash
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
@@ -205,7 +211,8 @@ examples/        # sample_cube.py
 - [ ] tune layer thickness / hatch parameters for nylon
 - [x] 3D nesting: several parts / copies packed into one build (bounding boxes)
 - [x] PySide6 desktop GUI: projects, background loading/slicing, layer + build-layout views
-- [ ] packaged app (.app / .exe) for people without Python
+- [x] packaged apps for macOS / Windows / Linux, built and smoke-tested by GitHub Actions on each version tag
+- [ ] code signing (removes the first-launch security prompt)
 
 > The ASCII `.cli` output is structurally valid and self-consistent, and the
 > POLYLINE direction flag follows the CLI spec. The `units`, header keywords, and

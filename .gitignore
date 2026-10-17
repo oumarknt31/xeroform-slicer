@@ -14,3 +14,7 @@ dist/
 # OS / tooling
 .DS_Store
 .serena/
+
+# Build outputs (python tools/make_icons.py, pyinstaller packaging/xeroform.spec)
+packaging/*.icns
+packaging/*.ico

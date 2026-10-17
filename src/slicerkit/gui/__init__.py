@@ -1,6 +1,7 @@
 """XeroForm desktop app (PySide6). Install with:  pip install -e ".[gui]"
 
 Run:  xeroform-gui [model.stl | project.xeroform ...]   or   python -m slicerkit.gui
+      xeroform-gui --smoke-test   checks a build works (slice, export, open the window)
 """
 from __future__ import annotations
 import logging
@@ -26,6 +27,39 @@ def _setup_logging() -> str:
     return path
 
 
+def smoke_test() -> int:
+    """Check that this build works end to end: load, slice and export a model, open the window.
+
+    Used on every packaged app before it is published. Settings go to a temporary
+    folder so the check leaves nothing behind.
+    """
+    import tempfile
+
+    import trimesh
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    from ..config import SliceConfig
+    from ..pipeline import slice_job
+    from .window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv[:1])
+    with tempfile.TemporaryDirectory() as folder:
+        QSettings.setDefaultFormat(QSettings.IniFormat)
+        QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, folder)
+        model, out = os.path.join(folder, "cube.stl"), os.path.join(folder, "cube.cli")
+        trimesh.creation.box(extents=[10, 10, 10]).export(model)
+        layers = slice_job(model, out, SliceConfig(layer_thickness=1)).layers
+        window = MainWindow()
+        window.show()
+        app.processEvents()
+        window.dirty = False
+        window.close()
+        ok = len(layers) == 9 and os.path.getsize(out) > 0
+    print(f"XeroForm smoke test: {'ok' if ok else 'FAILED'} ({len(layers)} layers)")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -34,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     from .window import APP_NAME, MainWindow
 
     argv = sys.argv if argv is None else argv
+    if "--smoke-test" in argv:
+        return smoke_test()
     app = QApplication.instance() or QApplication(argv)
     app.setOrganizationName(APP_NAME)
     app.setApplicationName(APP_NAME)
