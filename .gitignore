@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+
+# Example outputs
+*.stl
+*.cli
+
+# OS / tooling
+.DS_Store
+.serena/
