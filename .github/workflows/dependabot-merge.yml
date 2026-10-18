@@ -1,0 +1,34 @@
+# Merges a Dependabot PR once the full test suite has passed on it. A bump that
+# breaks something (e.g. a trimesh release PySLM can't use yet) stays open.
+name: Dependabot merge
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,headRefOid \
+                 --jq ".[] | select(.headRefOid == \"$SHA\") | .number")
+          if [ -z "$pr" ]; then echo "No open PR at $SHA"; exit 0; fi
+          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
