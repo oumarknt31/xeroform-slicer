@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 import os
-from dataclasses import fields
+from dataclasses import dataclass, fields
+
+import numpy as np
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import SliceConfig
+from ..orient import NO_ROTATION, Angles, extents
 from ..part import HUGE_MM, TINY_MM, MeshReport
 from ..project import ProjectPart
 from ..scan_order import SCAN_ORDERS
@@ -122,11 +125,32 @@ NUMBER_FIELDS = {
 }
 
 
+@dataclass
+class PartInfo:
+    """One model in the parts list, as loaded (unscaled, in the file's orientation)."""
+
+    path: str
+    report: MeshReport
+    hull: np.ndarray | None = None  # convex hull vertices, for instant size and orientation
+    edges: np.ndarray | None = None  # (E, 2, 3) outline edges for the preview
+    rotation: Angles = NO_ROTATION
+
+    def size(self, scale: float = 1.0) -> np.ndarray:
+        """Size (x, y, z) in mm at this scale and orientation."""
+        if self.hull is None:
+            return np.asarray(self.report.size) * scale
+        return extents(self.hull, self.rotation) * scale
+
+
 class PartsPanel(Card):
-    """The models to print, with a copy count each. Emits `changed` on any edit."""
+    """The models to print, with a copy count and orientation each.
+
+    Emits `changed` on any edit and `selection_changed` with the selected part.
+    """
 
     changed = Signal()
     add_requested = Signal()
+    selection_changed = Signal(object)  # PartInfo or None
 
     def __init__(self, parent=None):
         super().__init__("Parts", collapsible=False, parent=parent)
@@ -150,6 +174,8 @@ class PartsPanel(Card):
         self.table.setFocusPolicy(Qt.ClickFocus)
         self.table.verticalHeader().setDefaultSectionSize(34)
         self.table.setToolTip("Drop model files on the window or use Add")
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.itemSelectionChanged.connect(lambda: self.selection_changed.emit(self.selected()))
         col.addWidget(self.table)
         self.empty_hint = QLabel("No models yet.\nDrop STL, OBJ, PLY or 3MF files on the window,\nor click Add models.")
         self.empty_hint.setObjectName("hint")
@@ -175,11 +201,19 @@ class PartsPanel(Card):
 
     # --- rows ------------------------------------------------------------------
 
-    def add_part(self, path: str, report: MeshReport, copies: int = 1) -> None:
+    def add_part(
+        self,
+        path: str,
+        report: MeshReport,
+        copies: int = 1,
+        hull: np.ndarray | None = None,
+        edges: np.ndarray | None = None,
+        rotation: Angles = NO_ROTATION,
+    ) -> None:
         r = self.table.rowCount()
         self.table.insertRow(r)
         name = QTableWidgetItem(os.path.basename(path))
-        name.setData(Qt.UserRole, (path, report))
+        name.setData(Qt.UserRole, PartInfo(path, report, hull, edges, tuple(rotation)))
         self.table.setItem(r, 0, QTableWidgetItem())
         self.table.setItem(r, 1, name)
         spin = QSpinBox()
@@ -192,6 +226,24 @@ class PartsPanel(Card):
         self.table.setItem(r, 3, QTableWidgetItem())
         self._refresh_row(r)
         self._update_count()
+        if self.table.currentRow() < 0:
+            self.table.selectRow(r)
+        self.changed.emit()
+
+    def info(self, r: int) -> PartInfo:
+        return self.table.item(r, 1).data(Qt.UserRole)
+
+    def selected(self) -> PartInfo | None:
+        rows = {i.row() for i in self.table.selectedIndexes()}
+        return self.info(min(rows)) if rows else None
+
+    def set_selected_rotation(self, rotation: Angles) -> None:
+        rows = {i.row() for i in self.table.selectedIndexes()}
+        if not rows:
+            return
+        r = min(rows)
+        self.info(r).rotation = tuple(rotation)
+        self._refresh_row(r)
         self.changed.emit()
 
     def set_scale(self, scale: float) -> None:
@@ -200,8 +252,9 @@ class PartsPanel(Card):
             self._refresh_row(r)
 
     def _refresh_row(self, r: int) -> None:
-        path, report = self.table.item(r, 1).data(Qt.UserRole)
-        x, y, z = (v * self.scale for v in report.size)
+        info = self.info(r)
+        path, report = info.path, info.report
+        x, y, z = info.size(self.scale)
         self.table.item(r, 3).setText(f"{x:.1f} × {y:.1f} × {z:.1f}")
         notes = list(report.repairs) + list(report.warnings)
         largest = max(x, y, z)
@@ -250,13 +303,17 @@ class PartsPanel(Card):
 
     def parts(self) -> list[ProjectPart]:
         return [
-            ProjectPart(self.table.item(r, 1).data(Qt.UserRole)[0], self.table.cellWidget(r, 2).value())
+            ProjectPart(self.info(r).path, self.table.cellWidget(r, 2).value(), self.info(r).rotation)
             for r in range(self.table.rowCount())
         ]
 
+    def job_specs(self) -> list[tuple[str, Angles]]:
+        """Every part to print as (path, rotation), repeated once per copy."""
+        return [(p.path, p.rotation) for p in self.parts() for _ in range(p.copies)]
+
     def jobs(self) -> list[str]:
         """Every part to print, a path repeated once per copy."""
-        return [p.path for p in self.parts() for _ in range(p.copies)]
+        return [path for path, _ in self.job_specs()]
 
 
 class SettingsPanel(QWidget):

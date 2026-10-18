@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from . import theme
 from .constants import APP_NAME
+from .orientation import OrientationPanel
 from .panels import PartsPanel, SettingsPanel
 from .views import LayerView, LayoutView, StackView
 from .widgets import Card, EmptyState, Segmented, StatTile, chip, spaced, tool_button
@@ -114,9 +115,11 @@ class WindowLayoutMixin:
         col.setContentsMargins(0, 0, 6, 0)
         col.setSpacing(10)
         self.parts = PartsPanel()
+        self.orientation = OrientationPanel()
         self.settings = SettingsPanel()
-        self._themed += [self.parts, self.settings]
+        self._themed += [self.parts, self.orientation, self.settings]
         col.addWidget(self.parts)
+        col.addWidget(self.orientation)
         col.addWidget(self.settings)
         col.addStretch()
         scroll = QScrollArea()

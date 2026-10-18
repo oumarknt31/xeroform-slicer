@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Callable
 
+from .orient import NO_ROTATION, Angles
 from .part import Part, MeshError, MeshReport, prepare_mesh
 from .hatching import HatchSettings
 from .layers import Layer
@@ -46,9 +47,15 @@ Progress = Callable[[int, int], None]
 
 
 def slice_job(
-    input_path: str, output_path: str | None, config: SliceConfig | None = None, progress: Progress | None = None
+    input_path: str,
+    output_path: str | None,
+    config: SliceConfig | None = None,
+    progress: Progress | None = None,
+    rotation: Angles = NO_ROTATION,
 ) -> SliceResult:
     """Slice `input_path` and write laser tool-paths to `output_path` (None = don't write).
+
+    rotation orients the model first (degrees about X, then Y, then Z).
 
     Raises MeshError (with a user-facing message) if the model can't be sliced.
     progress(done, total) is called per layer; raise from it to cancel.
@@ -56,7 +63,7 @@ def slice_job(
     config = config or SliceConfig()
     # Resolve the exporter first so a bad format fails before the slow slicing.
     exporter = get_exporter(config.export_format, units=config.units)
-    part = Part(input_path, scale=config.scale, build_volume=config.build_volume)
+    part = Part(input_path, scale=config.scale, build_volume=config.build_volume, rotation=rotation)
     layers = _slice_and_export(part, config, exporter, output_path, progress)
     return SliceResult(layers=layers, reports=[(input_path, part.report)], bounding_box=tuple(part.bounding_box))
 
@@ -67,11 +74,13 @@ def slice_build(
     config: SliceConfig | None = None,
     copies: int = 1,
     progress: Progress | None = None,
+    rotations: list[Angles] | None = None,
 ) -> SliceResult:
     """Pack `copies` of every model in `input_paths` into one build, slice and export it.
 
-    A path listed twice is packed twice. Needs config.build_volume. Raises
-    MeshError / NestingError with a user-facing message.
+    A path listed twice is packed twice. `rotations` (one per path) orients each
+    model first. Needs config.build_volume. Raises MeshError / NestingError with
+    a user-facing message.
     """
     config = config or SliceConfig()
     if copies < 1:
@@ -80,15 +89,19 @@ def slice_build(
         raise MeshError("Packing several parts needs the build volume (--build-volume X Y Z).")
     exporter = get_exporter(config.export_format, units=config.units)
 
-    loaded = {path: prepare_mesh(path, config.scale) for path in dict.fromkeys(input_paths)}
-    jobs = [path for path in input_paths for _ in range(copies)]
-    meshes = [loaded[path][0] for path in jobs]
+    rotations = [tuple(r) for r in rotations] if rotations else [NO_ROTATION] * len(input_paths)
+    if len(rotations) != len(input_paths):
+        raise ValueError("rotations needs one entry per input path")
+    specs = list(zip(input_paths, rotations))
+    loaded = {spec: prepare_mesh(spec[0], config.scale, spec[1]) for spec in dict.fromkeys(specs)}
+    jobs = [spec for spec in specs for _ in range(copies)]
+    meshes = [loaded[spec][0] for spec in jobs]
     merged, placements = arrange(
         meshes,
         config.build_volume,
         config.part_spacing,
         config.allow_rotation,
-        names=[os.path.basename(p) for p in jobs],
+        names=[os.path.basename(path) for path, _ in jobs],
     )
     part = Part.from_mesh(merged)
     layers = _slice_and_export(part, config, exporter, output_path, progress)
@@ -96,9 +109,12 @@ def slice_build(
     X, Y, _ = config.build_volume
     height = part.report.size[2]
     build = BuildReport(placements=placements, height=height, density=sum(m.volume for m in meshes) / (X * Y * height))
+    reports = {}
+    for (path, _), (_, report) in loaded.items():
+        reports.setdefault(path, report)  # one report per model file
     return SliceResult(
         layers=layers,
-        reports=[(p, r) for p, (_, r) in loaded.items()],
+        reports=list(reports.items()),
         build=build,
         bounding_box=tuple(part.bounding_box),
     )

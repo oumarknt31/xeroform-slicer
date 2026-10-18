@@ -14,6 +14,8 @@ import numpy as np
 import pyslm
 import trimesh
 
+from .orient import NO_ROTATION, Angles, rotate_mesh
+
 # Largest model dimension (mm) outside which the units are probably wrong.
 # STL has no units; inch CAD parts arrive 25.4x too small (e.g. a 5 mm "bracket").
 TINY_MM = 10.0
@@ -70,6 +72,7 @@ class Part:
     the plate) with its lowest point at z = 0.
 
     scale        : multiply the model by this, e.g. 25.4 for a model in inches.
+    rotation     : orientation, degrees about X, then Y, then Z.
     build_volume : (x, y, z) in mm; a model that doesn't fit raises MeshError.
     """
 
@@ -79,8 +82,9 @@ class Part:
         name: str = "part",
         scale: float = 1.0,
         build_volume: tuple[float, float, float] | None = None,
+        rotation: Angles = NO_ROTATION,
     ):
-        mesh, self.report = prepare_mesh(mesh_path, scale)
+        mesh, self.report = prepare_mesh(mesh_path, scale, rotation)
         check_fits(mesh, build_volume)
         self._part = pyslm.Part(name)
         self._part.setGeometryByMesh(mesh)
@@ -108,13 +112,17 @@ class Part:
         return self._part.getVectorSlice(z)
 
 
-def prepare_mesh(path: str, scale: float = 1.0) -> tuple[trimesh.Trimesh, MeshReport]:
-    """Load, repair, scale and centre a model on the platform; report what happened."""
+def prepare_mesh(path: str, scale: float = 1.0, rotation: Angles = NO_ROTATION) -> tuple[trimesh.Trimesh, MeshReport]:
+    """Load, repair, scale, orient and centre a model on the platform; report what happened.
+
+    rotation : degrees about X, then Y, then Z (see `xeroform.orient`).
+    """
     mesh = load_mesh(path)
     with np.errstate(all="ignore"):  # trimesh divides by zero on degenerate meshes
         repairs = repair_mesh(mesh)
     if scale != 1.0:
         mesh.apply_scale(scale)
+    rotate_mesh(mesh, rotation)
     place_on_platform(mesh)
     report = describe(mesh)
     report.repairs, report.warnings = repairs, shell_warnings(mesh) + unit_warnings(mesh)

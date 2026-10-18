@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (2026-10-18)
+
+- Orient parts in the app: X/Y/Z angles, ±90° turns, *Lay flat* (rests the
+  part on its largest flat face, then the next), *Lowest height* (fewest
+  layers) and *Reset*, with a 3D preview and live size and layer count.
+- `--orient lowest` and `--rotate X Y Z` on the command line.
+- Orientation is saved in project files.
+
 ## 0.2.0 (2026-10-17)
 
 - The Python package is now `xeroform` (`import xeroform`, `python -m xeroform`).

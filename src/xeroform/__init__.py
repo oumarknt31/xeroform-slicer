@@ -14,7 +14,7 @@ from .layers import Layer, Contour, Hatch, ScanParams
 from .laser import LaserSettings, estimate_scan_time
 from .preview import write_preview
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "SliceConfig",
     "slice_file",

@@ -348,6 +348,9 @@ _ICONS = {
     "ok": '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/>',
     "check-mark": '<path stroke-width="3" d="M5 12.5l4.5 4.5L19 7.5"/>',
     "stop": '<rect fill="C" stroke="none" x="6" y="6" width="12" height="12" rx="2"/>',
+    "rotate": '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/>',
+    "lay-flat": '<rect x="5" y="9" width="14" height="7" rx="1.5"/><path d="M3 20h18"/><path d="M12 3v3M10 5l2 2 2-2"/>',
+    "height": '<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/><path d="M4 4h4M4 20h4"/>',
     "logo": '<rect fill="C" stroke="none" x="2" y="2" width="20" height="20" rx="5"/>',
 }
 

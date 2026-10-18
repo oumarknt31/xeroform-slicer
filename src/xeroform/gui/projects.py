@@ -124,7 +124,9 @@ class ProjectsMixin:
         if not found:
             done()
             return None
-        return self.add_models([p.path for p in found], [p.copies for p in found], then=done)
+        return self.add_models(
+            [p.path for p in found], [p.copies for p in found], [p.rotation for p in found], then=done
+        )
 
     def save_project(self) -> bool:
         if self.project_path is None:

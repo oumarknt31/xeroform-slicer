@@ -24,6 +24,7 @@ class ProjectError(ValueError):
 class ProjectPart:
     path: str  # absolute in memory; relative to the project file on disk
     copies: int = 1
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)  # degrees about X, then Y, then Z
 
 
 @dataclass
@@ -36,7 +37,7 @@ class Project:
         data = {
             "format": FORMAT,
             "version": VERSION,
-            "parts": [{"path": _relative(p.path, base), "copies": p.copies} for p in self.parts],
+            "parts": [_part_entry(p, base) for p in self.parts],
             "settings": config_to_dict(self.config),
         }
         tmp = f"{path}.tmp"
@@ -59,20 +60,40 @@ class Project:
             raise ProjectError(f"{path} was saved by a newer XeroForm; please update.")
         base = os.path.dirname(os.path.abspath(path))
         try:
-            entries = [(str(p["path"]), int(p.get("copies", 1))) for p in data.get("parts", [])]
+            entries = [
+                (str(p["path"]), int(p.get("copies", 1)), _rotation(p.get("rotation", (0, 0, 0))))
+                for p in data.get("parts", [])
+            ]
         except (KeyError, TypeError, ValueError) as e:
             raise ProjectError(f"{path} has a malformed parts list.") from e
         # A project file may come from someone else. A network path in it would make
         # Windows contact that host (and send the user's credentials) as soon as we
         # check the file exists - so refuse those before touching the filesystem.
-        for raw, _ in entries:
+        for raw, *_ in entries:
             if _is_network_path(raw):
                 raise ProjectError(
                     f"{path} refers to a model on a network location ({raw}). "
                     "Copy the model next to the project and add it again."
                 )
-        parts = [ProjectPart(os.path.normpath(os.path.join(base, raw)), copies) for raw, copies in entries]
+        parts = [
+            ProjectPart(os.path.normpath(os.path.join(base, raw)), copies, rotation)
+            for raw, copies, rotation in entries
+        ]
         return cls(parts=parts, config=config_from_dict(data.get("settings", {})))
+
+
+def _part_entry(part: ProjectPart, base: str) -> dict:
+    entry = {"path": _relative(part.path, base), "copies": part.copies}
+    if any(part.rotation):
+        entry["rotation"] = [float(a) for a in part.rotation]
+    return entry
+
+
+def _rotation(value) -> tuple[float, float, float]:
+    angles = tuple(float(a) for a in value)
+    if len(angles) != 3:
+        raise ValueError("rotation needs three angles")
+    return angles
 
 
 def config_to_dict(config: SliceConfig) -> dict:

@@ -348,3 +348,64 @@ def test_about_mentions_the_license(window, monkeypatch):
     monkeypatch.setattr(QMessageBox, "about", lambda parent, title, text: shown.append(text))
     window.about()
     assert "MIT License" in shown[0] and "THIRD_PARTY_NOTICES" in shown[0]
+
+
+# --- orientation ------------------------------------------------------------
+
+
+@pytest.fixture
+def tall_model(tmp_path):
+    path = tmp_path / "tall.stl"
+    trimesh.creation.box(extents=[10, 20, 60]).export(str(path))
+    return str(path)
+
+
+def test_orientation_card_follows_selection(window, tall_model, models):
+    assert window.orientation.part is None and not window.orientation.placeholder.isHidden()
+    wait(window.add_models([tall_model, models[0]]))
+    assert window.orientation.part.path == tall_model  # the first part is selected
+    assert "60.0 mm tall" in window.orientation.info.text()
+    window.parts.table.selectRow(1)
+    assert window.orientation.part.path == models[0]
+    assert not window.orientation.preview.grab().isNull()
+
+
+def test_lowest_height_lays_the_part_down(window, tall_model):
+    wait(window.add_models([tall_model]))
+    window.settings.spins["layer_thickness"].setValue(1)
+    window.orientation._lowest()
+    assert window.parts.table.item(0, 3).text() == "60.0 × 20.0 × 10.0"
+    assert "10 layers at 1 mm" in window.orientation.info.text()
+    wait(window.start_slicing())
+    assert len(window.result.layers) == 9  # sliced lying down
+    window.orientation._turn("x")
+    assert window.stale  # turning a part after slicing makes the slice out of date
+
+
+def test_lay_flat_steps_and_reset(window, tall_model):
+    wait(window.add_models([tall_model]))
+    window.orientation._lay_flat()
+    assert "resting on face 1 of 6" in window.orientation.info.text()
+    window.orientation._lay_flat()
+    window.orientation._lay_flat()
+    assert "resting on face 3 of 6" in window.orientation.info.text()
+    window.orientation.reset_button.click()
+    assert window.parts.info(0).rotation == (0.0, 0.0, 0.0)
+
+
+def test_angle_boxes_set_the_rotation(window, tall_model):
+    wait(window.add_models([tall_model]))
+    window.orientation.spins[0].setValue(90)
+    assert window.parts.info(0).rotation == (90.0, 0.0, 0.0)
+    assert window.parts.table.item(0, 3).text() == "10.0 × 60.0 × 20.0"
+
+
+def test_project_keeps_orientation(window, tall_model, tmp_path, monkeypatch):
+    wait(window.add_models([tall_model]))
+    window.orientation._lowest()
+    path = str(tmp_path / "o.xeroform")
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path, ""))
+    assert window.save_project()
+    window.new_project()
+    wait(window.open_project(path))
+    assert window.parts.table.item(0, 3).text() == "60.0 × 20.0 × 10.0"

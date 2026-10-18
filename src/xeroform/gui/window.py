@@ -26,10 +26,12 @@ from PySide6.QtWidgets import (
 
 from .. import __version__
 from ..laser import estimate_scan_time, layer_scan_time
+from ..orient import NO_ROTATION
 from ..part import MeshError, prepare_mesh
 from ..pipeline import SliceResult, slice_build, slice_job
 from ..summary import hms, summary_lines
 from . import theme
+from .orientation import outline_edges
 from .constants import APP_NAME, FLIPBOOK_FPS, MODEL_FILTER, REPO_URL, THEME_ICONS, THEME_NAMES
 from .playback import PlaybackMixin
 from .projects import ProjectsMixin
@@ -93,6 +95,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
 
         self.parts.changed.connect(self._changed)
         self.parts.add_requested.connect(self.add_models_dialog)
+        self.parts.selection_changed.connect(self.orientation.set_part)
+        self.orientation.rotation_changed.connect(self.parts.set_selected_rotation)
         self.settings.changed.connect(self._settings_changed)
         self._restore_state()
         self.dirty = False
@@ -186,6 +190,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
 
     def _settings_changed(self) -> None:
         self.parts.set_scale(self.settings.spins["scale"].value())
+        self.orientation.set_scale(self.settings.spins["scale"].value())
+        self.orientation.set_layer_thickness(self.settings.spins["layer_thickness"].value())
         self._changed()
 
     def _set_view_option(self, name: str, on: bool) -> None:
@@ -265,28 +271,37 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
             self._remember_dir(paths[0])
             self.add_models(paths)
 
-    def add_models(self, paths: list[str], copies: list[int] | None = None, then=None) -> Task:
+    def add_models(
+        self,
+        paths: list[str],
+        copies: list[int] | None = None,
+        rotations: list | None = None,
+        then=None,
+    ) -> Task:
         """Load models in the background and add them to the parts list."""
         copies = copies or [1] * len(paths)
+        rotations = rotations or [NO_ROTATION] * len(paths)
 
         def load(progress):
             out = []
             for i, path in enumerate(paths):
                 progress(f"Loading {os.path.basename(path)}", i, len(paths))
                 try:
-                    _, report = prepare_mesh(path, 1.0)  # sizes are shown at the current scale
-                    out.append((path, report, None))
+                    mesh, report = prepare_mesh(path, 1.0)  # sizes are shown at the current scale
+                    shape = (mesh.convex_hull.vertices, outline_edges(mesh))
+                    out.append((path, report, shape, None))
                 except MeshError as e:
-                    out.append((path, None, str(e)))
+                    out.append((path, None, None, str(e)))
             return out
 
         def loaded(results):
             problems = []
-            for (path, report, error), n in zip(results, copies):
+            for (path, report, shape, error), n, rotation in zip(results, copies, rotations):
                 if error:
                     problems.append(f"{os.path.basename(path)}: {error}")
                 else:
-                    self.parts.add_part(path, report, n)
+                    hull, edges = shape
+                    self.parts.add_part(path, report, n, hull=hull, edges=edges, rotation=rotation)
             if problems:
                 QMessageBox.warning(self, "Some models can't be used", "\n\n".join(problems))
             added = len(results) - len(problems)
@@ -302,7 +317,9 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
     def start_slicing(self) -> Task | None:
         if self.busy():
             return None
-        jobs = self.parts.jobs()
+        specs = self.parts.job_specs()
+        jobs = [path for path, _ in specs]
+        rotations = [rotation for _, rotation in specs]
         if not jobs:
             self.toast("Add a model first.", "warning")
             return None
@@ -316,8 +333,8 @@ class MainWindow(WindowLayoutMixin, ProjectsMixin, PlaybackMixin, QMainWindow):
             progress("Loading and packing models")
             step = lambda done, total: progress("Slicing layer", done, total)  # noqa: E731
             if len(jobs) == 1:
-                return slice_job(jobs[0], None, config, step)
-            return slice_build(jobs, None, config, progress=step)
+                return slice_job(jobs[0], None, config, step, rotation=rotations[0])
+            return slice_build(jobs, None, config, progress=step, rotations=rotations)
 
         self._stop_playback()
         self.report.setPlainText(f"Slicing {len(jobs)} part{'s' if len(jobs) > 1 else ''}…")

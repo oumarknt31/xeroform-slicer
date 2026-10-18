@@ -46,6 +46,11 @@ Start it from Applications, the Start menu or your app menu, or run
 - **Parts**: add models, or drop them on the window, and set copies per model. A
   warning icon marks a model with repairs or a likely units problem; hover it
   for details.
+- **Orientation**: turn the selected part with X/Y/Z angles or ±90° buttons.
+  *Lay flat* rests it on its largest flat face (click again for the next face),
+  and *Lowest height* turns it for the fewest layers, which is the fastest and
+  cheapest way to print it. A 3D preview shows the part on the plate, and the
+  size and layer count update as you turn it.
 - **Settings**: grouped in collapsible cards, each with a tooltip. *Reset to
   defaults* restores them. The build volume starts as a 150 mm placeholder until
   the machine is known.
@@ -83,6 +88,10 @@ xeroform model.stl -o model.cli --layer 0.1 --hatch-distance 0.2
 
 # also write an interactive layer preview to open in a browser
 xeroform model.stl -o model.cli --preview model.html
+
+# turn a model for the fewest layers, or by fixed angles (degrees about X, Y, Z)
+xeroform model.stl -o model.cli --orient lowest
+xeroform model.stl -o model.cli --rotate 90 0 0
 
 # a model drawn in inches, checked against the machine's build volume
 xeroform model.stl -o model.cli --scale 25.4 --build-volume 150 150 150
@@ -177,6 +186,7 @@ write_preview(layers, "model.html")
 ```text
 src/xeroform/
   part.py         load, repair, check and place a mesh
+  orient.py       rotations, lay flat, lowest build height
   slicing.py      part -> layers (the only PySLM -> XeroForm translation)
   hatching.py     hatch and contour settings
   scan_order.py   order and direction of fill lines
@@ -218,7 +228,7 @@ To publish a release, set `__version__` in `src/xeroform/__init__.py`, add an
 entry to [CHANGELOG.md](CHANGELOG.md), then push a tag:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 GitHub Actions builds the app for macOS (Apple Silicon and Intel), Windows and
@@ -228,7 +238,7 @@ Linux, checks each build starts and slices, publishes the release with
 
 ## Status
 
-Done: slicing with orientation-correct contours, per-layer hatch rotation,
+Done: part orientation, slicing with orientation-correct contours, per-layer hatch rotation,
 laser settings and time estimate, mesh checks and repairs, scan order, nesting,
 HTML preview, command line, desktop app, packaged releases and installers.
 

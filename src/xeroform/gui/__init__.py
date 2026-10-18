@@ -29,7 +29,8 @@ def _setup_logging() -> str:
 
 
 def smoke_test() -> int:
-    """Check that this build works end to end: load, slice and export a model, open the window.
+    """Check that this build works end to end: load, orient, slice and export a model,
+    then open the window.
 
     Used on every packaged app before it is published. Settings go to a temporary
     folder so the check leaves nothing behind.
@@ -41,6 +42,8 @@ def smoke_test() -> int:
     from PySide6.QtWidgets import QApplication
 
     from ..config import SliceConfig
+    from ..orient import lowest
+    from ..part import prepare_mesh
     from ..pipeline import slice_job
     from .window import MainWindow
 
@@ -49,8 +52,9 @@ def smoke_test() -> int:
         QSettings.setDefaultFormat(QSettings.IniFormat)
         QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, folder)
         model, out = os.path.join(folder, "cube.stl"), os.path.join(folder, "cube.cli")
-        trimesh.creation.box(extents=[10, 10, 10]).export(model)
-        layers = slice_job(model, out, SliceConfig(layer_thickness=1)).layers
+        trimesh.creation.box(extents=[10, 20, 60]).export(model)  # standing up; lies down to 10 mm
+        hull = prepare_mesh(model)[0].convex_hull.vertices
+        layers = slice_job(model, out, SliceConfig(layer_thickness=1), rotation=lowest(hull)).layers
         window = MainWindow()
         window.show()
         app.processEvents()

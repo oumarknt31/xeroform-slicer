@@ -8,7 +8,8 @@ import sys
 from . import __version__
 from .pipeline import slice_build, slice_job
 from .nesting import NestingError
-from .part import MeshError
+from .orient import NO_ROTATION, lowest
+from .part import MeshError, prepare_mesh
 from .config import SliceConfig
 from .scan_order import SCAN_ORDERS
 from .preview import write_preview
@@ -41,6 +42,20 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--units", type=float, default=1.0, help="mm per .cli coordinate unit")
     ap.add_argument("--scale", type=float, default=1.0, help="scale the model, e.g. 25.4 if it was made in inches")
+    orient = ap.add_mutually_exclusive_group()
+    orient.add_argument(
+        "--rotate",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        help="turn every model by these angles in degrees (about X, then Y, then Z)",
+    )
+    orient.add_argument(
+        "--orient",
+        choices=["file", "lowest"],
+        default="file",
+        help="file = as saved (default); lowest = lowest build height, resting on its largest face",
+    )
     ap.add_argument(
         "--build-volume",
         type=float,
@@ -101,10 +116,11 @@ def main(argv=None) -> int:
         ap.error(str(e))
     several = len(args.inputs) > 1 or args.copies > 1
     try:
+        rotations = [_orientation(path, args, cfg) for path in args.inputs]
         if several:
-            result = slice_build(args.inputs, args.output, cfg, copies=args.copies)
+            result = slice_build(args.inputs, args.output, cfg, copies=args.copies, rotations=rotations)
         else:
-            result = slice_job(args.inputs[0], args.output, cfg)
+            result = slice_job(args.inputs[0], args.output, cfg, rotation=rotations[0])
     except (MeshError, NestingError) as e:
         print(f"xeroform: error: {e}", file=sys.stderr)
         return 1
@@ -115,6 +131,15 @@ def main(argv=None) -> int:
         write_preview(layers, args.preview, title=title, every=args.preview_every, jump_speed=cfg.jump_speed)
         print(f"Preview -> {args.preview}")
     return 0
+
+
+def _orientation(path: str, args, cfg: SliceConfig) -> tuple[float, float, float]:
+    if args.rotate:
+        return tuple(args.rotate)
+    if args.orient == "lowest":
+        mesh, _ = prepare_mesh(path, cfg.scale)
+        return lowest(mesh.convex_hull.vertices)
+    return NO_ROTATION
 
 
 if __name__ == "__main__":
