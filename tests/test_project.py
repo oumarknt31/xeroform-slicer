@@ -26,6 +26,39 @@ def test_round_trip_with_relative_paths(tmp_path):
     assert loaded.config == cfg
 
 
+def test_own_settings_and_positions_round_trip(tmp_path):
+    (tmp_path / "bar.stl").write_text("x")
+    part = ProjectPart(
+        str(tmp_path / "bar.stl"),
+        copies=3,
+        rotation=(0, 90, 0),
+        settings={"hatch_power": 8.0, "hatch_distance": 0.15},
+        spots=[(10.0, -5.0, 0.0, 90), (30.0, -5.0, 0.0, 0)],  # the third copy is packed
+    )
+    path = tmp_path / "job.xeroform"
+    Project([part]).save(str(path))
+    entry = json.loads(path.read_text(encoding="utf-8"))["parts"][0]
+    assert entry["settings"] == {"hatch_power": 8.0, "hatch_distance": 0.15}
+    assert entry["spots"] == [[10.0, -5.0, 0.0, 90], [30.0, -5.0, 0.0, 0]]
+    assert Project.load(str(path)).parts == [part]
+
+
+@pytest.mark.parametrize(
+    "entry, match",
+    [
+        ({"settings": {"layer_thickness": 0.2}}, "can't have its own layer_thickness"),
+        ({"settings": {"hatch_power": -1}}, "hatch_power must be >= 0"),
+        ({"spots": [[0, 0, 0, 45]]}, "malformed parts"),
+        ({"spots": [[0, 0]]}, "malformed parts"),
+    ],
+)
+def test_bad_part_settings_or_positions(tmp_path, entry, match):
+    path = tmp_path / "bad.xeroform"
+    path.write_text(json.dumps({"format": "xeroform-project", "parts": [{"path": "a.stl", **entry}]}))
+    with pytest.raises(ProjectError, match=match):
+        Project.load(str(path))
+
+
 def test_folder_can_move(tmp_path):
     src = tmp_path / "a"
     src.mkdir()

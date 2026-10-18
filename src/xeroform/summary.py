@@ -21,6 +21,8 @@ def summary_lines(result: SliceResult, config: SliceConfig, output: str | None =
         )
         lines += [f"  repaired: {repair}" for repair in report.repairs]
         lines += [f"  warning: {warning}" for warning in report.warnings]
+        if own := result.own_settings.get(path):
+            lines.append(f"  own settings: {describe_settings(own)}")
     if result.build:
         b = result.build
         turned = sum(p.rotated for p in b.placements)
@@ -28,12 +30,32 @@ def summary_lines(result: SliceResult, config: SliceConfig, output: str | None =
             f"Build: {len(b.placements)} parts packed {b.height:.1f} mm high "
             f"({turned} turned), packing density {b.density:.1%}"
         )
+        lines += [f"  warning: {warning}" for warning in b.warnings]
     vectors = sum(layer.num_hatch_vectors for layer in result.layers)
     lines.append(f"Sliced {len(result.layers)} layers ({vectors} hatch vectors)" + (f" -> {output}" if output else ""))
     seconds = estimate_scan_time(result.layers, config.jump_speed)
     lines.append(f"Estimated laser time: {hms(seconds)} (scanning only; excludes recoating/heating)")
     lines.append(f"Hatch energy density: {config.hatch_energy_density:.4f} J/mm^2")
     return lines
+
+
+_LABELS = {
+    "hatch_power": ("fill", "W"),
+    "hatch_speed": ("fill", "mm/s"),
+    "contour_power": ("outline", "W"),
+    "contour_speed": ("outline", "mm/s"),
+    "hatch_distance": ("hatch spacing", "mm"),
+}
+
+
+def describe_settings(own: dict) -> str:
+    """A part's own settings in a few words, e.g. "fill 8 W, 400 mm/s; hatch spacing 0.15 mm"."""
+    groups: dict[str, list[str]] = {}
+    for key in _LABELS:
+        if key in own:
+            label, unit = _LABELS[key]
+            groups.setdefault(label, []).append(f"{own[key]:g} {unit}")
+    return "; ".join(f"{label} {', '.join(values)}" for label, values in groups.items())
 
 
 def hms(seconds: float) -> str:

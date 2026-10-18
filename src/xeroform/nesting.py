@@ -20,10 +20,12 @@ centred on the plate, where the powder bed is most even.
 """
 
 from __future__ import annotations
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
 import trimesh
+from scipy.spatial import cKDTree
 
 _TOL = 1e-9
 
@@ -32,6 +34,9 @@ class NestingError(ValueError):
     """The parts don't fit in the build volume."""
 
     placed = 0  # how many parts did fit
+
+
+Spot = tuple[float, float, float, int]  # centre x, centre y and bottom z (mm) of a part, turn about Z (deg)
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,19 @@ class Placement:
     @property
     def rotated(self) -> bool:
         return self.turn % 360 != 0
+
+    @property
+    def spot(self) -> Spot:
+        """Where the part is, independent of its size: footprint centre, bottom, turn."""
+        (x, y, z), (sx, sy, _) = self.position, self.size
+        return (x + sx / 2, y + sy / 2, z, self.turn)
+
+
+def placement_at(mesh: trimesh.Trimesh, item: int, spot: Spot) -> Placement:
+    """The Placement that puts `mesh` (as part `item`) at `spot`."""
+    x, y, z, turn = spot
+    sx, sy, sz = _turned(mesh, int(turn)).extents
+    return Placement(item, (x - sx / 2, y - sy / 2, z), int(turn) % 360, (float(sx), float(sy), float(sz)))
 
 
 def pack_boxes(
@@ -183,24 +201,27 @@ def _turned(mesh: trimesh.Trimesh, turn: int) -> trimesh.Trimesh:
     return m
 
 
-def _triangles(mesh: trimesh.Trimesh, pitch: float) -> np.ndarray:
-    """(n, 3, 3) triangles of the mesh, split until no edge is longer than `pitch`,
-    so each one touches at most 2 x 2 columns."""
+def _boxes(mesh: trimesh.Trimesh, pitch: float) -> np.ndarray:
+    """(n, 2, 3) bounding boxes (min, max corner) of the mesh's triangles, split
+    until no edge is longer than half a column: each one then touches at most
+    2 x 2 columns, and claims little more than it covers."""
     vertices, faces = mesh.vertices, mesh.faces
     longest = float(np.max(mesh.edges_unique_length)) if len(mesh.edges_unique) else 0.0
-    if longest > pitch:
-        steps = int(np.ceil(np.log2(longest / pitch))) + 2
-        vertices, faces = trimesh.remesh.subdivide_to_size(vertices, faces, max_edge=pitch, max_iter=steps)
-    return vertices[faces]
+    if longest > pitch / 2:
+        steps = int(np.ceil(np.log2(longest / (pitch / 2)))) + 2
+        vertices, faces = trimesh.remesh.subdivide_to_size(vertices, faces, max_edge=pitch / 2, max_iter=steps)
+    tri = vertices[faces]
+    return np.stack([tri.min(axis=1), tri.max(axis=1)], axis=1)
 
 
-def _columns(tri: np.ndarray, pitch: float) -> tuple[np.ndarray, np.ndarray]:
-    """Lowest and highest cell of the part in each (pitch x pitch) column, for
-    triangles with their min corner at the origin. Errs on the side of too much:
-    every triangle claims each column its bounding box touches."""
-    w, d = (max(1, int(np.ceil(e / pitch - 1e-9))) for e in np.ptp(tri.reshape(-1, 3), axis=0)[:2])
-    lo = np.floor(tri.min(axis=1) / pitch).astype(int)
-    hi = np.floor(tri.max(axis=1) / pitch).astype(int)
+def _columns(boxes: np.ndarray, pitch: float, grid: tuple[int, int] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Lowest and highest cell of the part in each (pitch x pitch) column, from
+    its triangles' `boxes`, with their min corner at the origin (or, on a `grid`
+    of columns, anywhere: what lies outside it lands on its edge). Errs on the
+    side of too much: every triangle claims each column its box touches."""
+    lo = np.floor(boxes[:, 0] / pitch).astype(int)
+    hi = np.floor(boxes[:, 1] / pitch).astype(int)
+    w, d = grid or (max(1, int(np.ceil(e / pitch - 1e-9))) for e in boxes[:, 1, :2].max(axis=0))
     bottom = np.full((w, d), -_EMPTY, dtype=np.int64)
     top = np.full((w, d), _EMPTY, dtype=np.int64)
     for ix in (lo[:, 0], hi[:, 0]):
@@ -226,27 +247,47 @@ def _gap_offsets(spacing: float, pitch: float) -> list[tuple[int, int, int]]:
     return offsets
 
 
-def _shape(tri: np.ndarray, turn: int, pitch: float, offsets) -> _Shape:
-    x, y, z = np.moveaxis(tri, -1, 0)
-    x, y = {0: (x, y), 90: (-y, x), 180: (-x, -y), 270: (y, -x)}[turn]
-    tri = np.stack([x, y, z], axis=-1)
-    tri = tri - tri.reshape(-1, 3).min(axis=0)
-    bottom, top = _columns(tri, pitch)
+def _turn(boxes: np.ndarray, turn: int) -> np.ndarray:
+    """Triangle boxes turned about Z, with their min corner moved to the origin."""
+    (x0, y0, z0), (x1, y1, z1) = boxes[:, 0].T, boxes[:, 1].T
+    x0, y0, x1, y1 = {
+        0: (x0, y0, x1, y1),
+        90: (-y1, x0, -y0, x1),
+        180: (-x1, -y1, -x0, -y0),
+        270: (y0, -x1, y1, -x0),
+    }[turn % 360]
+    boxes = np.stack([np.stack([x0, y0, z0], axis=-1), np.stack([x1, y1, z1], axis=-1)], axis=1)
+    return boxes - boxes[:, 0].min(axis=0)
+
+
+def _grow(top: np.ndarray, offsets, out: np.ndarray, at: tuple[int, int, int] = (0, 0, 0)) -> None:
+    """Raise `out` (padded by r) to the top of the part grown by the spacing; the
+    part's columns start at column `at[:2]` and cell `at[2]` of `out`'s grid."""
+    r = max(abs(a) for a, _, _ in offsets)
+    u, v, z = at
+    w, d = top.shape
+    lifted = np.where(top > _EMPTY, top + z, _EMPTY)
+    for a, b, c in offsets:
+        view = out[u + r + a : u + r + a + w, v + r + b : v + r + b + d]
+        np.maximum(view, np.where(lifted > _EMPTY, lifted + c, _EMPTY), out=view)
+
+
+def _shape(boxes: np.ndarray, turn: int, pitch: float, offsets) -> _Shape:
+    boxes = _turn(boxes, turn)
+    bottom, top = _columns(boxes, pitch)
     r = max(abs(a) for a, _, _ in offsets)
     w, d = top.shape
     grown = np.full((w + 2 * r, d + 2 * r), _EMPTY, dtype=np.int64)
-    for a, b, c in offsets:
-        view = grown[r + a : r + a + w, r + b : r + b + d]
-        np.maximum(view, np.where(top > _EMPTY, top + c, _EMPTY), out=view)
-    return _Shape(np.ptp(tri.reshape(-1, 3), axis=0), bottom, grown)
+    _grow(top, offsets, grown)
+    return _Shape(boxes[:, 1].max(axis=0), bottom, grown)
 
 
 def _distinct_turns(mesh, turns, pitch, offsets) -> list[tuple[int, _Shape]]:
     """The part's shape at each turn, leaving out turns that look the same (a cube's)."""
-    tri = _triangles(mesh, pitch)
+    boxes = _boxes(mesh, pitch)
     distinct: list[tuple[int, _Shape]] = []
     for turn in turns:
-        shape = _shape(tri, turn, pitch, offsets)
+        shape = _shape(boxes, turn, pitch, offsets)
         same = (np.array_equal(shape.bottom, o.bottom) and np.array_equal(shape.top, o.top) for _, o in distinct)
         if not any(same):
             distinct.append((turn, shape))
@@ -259,21 +300,27 @@ def pack_shapes(
     spacing: float = 3.0,
     allow_rotation: bool = True,
     names: list[str] | None = None,
+    pinned: dict[int, Placement] | None = None,
 ) -> list[Placement]:
     """Pack `meshes` by their shape (see the module docstring). Same result
     format as pack_boxes; a Placement's size is the part's box as placed.
 
+    pinned : parts that stay where they are (by index); the others are packed
+    around them, and the group is not re-centred.
+
     Each level is filled two ways - growing as a square, and growing the least
     area - and the lower build is kept.
     """
+    pinned = pinned or {}
     sizes = [tuple(float(v) for v in m.extents) for m in meshes]
     names = names or [f"part {i + 1}" for i in range(len(meshes))]
-    _check_each_fits(sizes, volume, spacing, allow_rotation, names)
+    loose = [i for i in range(len(meshes)) if i not in pinned]
+    _check_each_fits([sizes[i] for i in loose], volume, spacing, allow_rotation, [names[i] for i in loose])
     shapes: dict[int, list[tuple[int, _Shape]]] = {}  # by id(mesh)
     results, errors = [], []
     for rule in ("square", "area"):
         try:
-            results.append(_pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, shapes))
+            results.append(_pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, shapes, pinned))
         except NestingError as e:
             errors.append(e)
     if not results:
@@ -281,7 +328,7 @@ def pack_shapes(
     return min(results, key=_build_size)
 
 
-def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, shapes) -> list[Placement]:
+def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, shapes, pinned) -> list[Placement]:
     X, Y, Z = volume
     pitch = max(max(X, Y) / _CELLS, _MIN_PITCH)
     offsets = _gap_offsets(spacing, pitch)
@@ -289,11 +336,26 @@ def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, sh
     floor_x, floor_y = X - 2 * spacing, Y - 2 * spacing  # where parts may go
     gx, gy = int(np.ceil(floor_x / pitch)), int(np.ceil(floor_y / pitch))
     skyline = np.full((gx + 2 * r, gy + 2 * r), _EMPTY, dtype=np.int64)  # top of the grown parts, padded by r
+    corner = np.array([spacing - X / 2, spacing - Y / 2, 0.0])  # build coordinates of the grid's origin
+
+    height = 0.0
+    group = np.array([np.inf, np.inf, -np.inf, -np.inf])  # footprint of everything placed: x0, y0, x1, y1
+    placements: dict[int, Placement] = {}
+    boxes: dict[int, np.ndarray] = {}
+    for i, p in pinned.items():
+        if id(meshes[i]) not in boxes:
+            boxes[id(meshes[i])] = _boxes(meshes[i], pitch)
+        placed = _turn(boxes[id(meshes[i])], p.turn) + (np.asarray(p.position) - corner)
+        _, top = _columns(placed, pitch, (gx, gy))
+        _grow(top, offsets, skyline)
+        x, y, z = np.asarray(p.position) - corner
+        height = max(height, z + p.size[2])
+        group = _grown_by(group, x, y, p.size)
+        placements[i] = p
 
     turns = (0, 90, 180, 270) if allow_rotation else (0,)
-    order = sorted(range(len(meshes)), key=lambda i: -np.prod(sizes[i]))  # biggest first
-    height = reach_x = reach_y = 0.0
-    placements: dict[int, Placement] = {}
+    loose = [i for i in range(len(meshes)) if i not in pinned]
+    order = sorted(loose, key=lambda i: -np.prod(sizes[i]))  # biggest first
     left_out: list[int] = []
     full: set[int] = set()  # meshes a copy of which fitted nowhere: later copies won't either
     for i in order:
@@ -305,7 +367,8 @@ def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, sh
             shapes[mesh] = _distinct_turns(meshes[i], turns, pitch, offsets)
         best = None
         for turn, shape in shapes[mesh]:
-            found = _lowest_spot(shape, skyline, r, (floor_x, floor_y, Z), pitch, (height, reach_x, reach_y), rule)
+            state = (height, group, bool(pinned))
+            found = _lowest_spot(shape, skyline, r, (floor_x, floor_y, Z), pitch, state, rule)
             if found is not None and (best is None or found[0] < best[0]):
                 best = (*found, turn, shape)
         if best is None:
@@ -318,21 +381,28 @@ def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, sh
         np.maximum(view, np.where(shape.top > _EMPTY, shape.top + z, _EMPTY), out=view)
         x, y = u * pitch, v * pitch
         height = max(height, z * pitch + shape.size[2])
-        reach_x, reach_y = max(reach_x, x + shape.size[0]), max(reach_y, y + shape.size[1])
-        position = (x + spacing - X / 2, y + spacing - Y / 2, z * pitch)
+        group = _grown_by(group, x, y, shape.size)
+        position = tuple(float(c) for c in corner + (x, y, z * pitch))
         placements[i] = Placement(i, position, turn, tuple(float(v) for v in shape.size))
     if left_out:
         raise _left_over(left_out, len(meshes), names, volume, spacing)
-    return _centre([placements[i] for i in range(len(meshes))])
+    placed = [placements[i] for i in range(len(meshes))]
+    return placed if pinned else _centre(placed)
+
+
+def _grown_by(group: np.ndarray, x: float, y: float, size) -> np.ndarray:
+    return np.array([min(group[0], x), min(group[1], y), max(group[2], x + size[0]), max(group[3], y + size[1])])
 
 
 def _lowest_spot(shape: _Shape, skyline, r, room, pitch, state, rule):
     """Best place for `shape`: (sort key, (u, v, z) cells), or None if it fits nowhere.
 
     Lowest build first, then lowest spot, then the most compact group: the
-    squarest ("square") or the smallest ("area")."""
+    squarest ("square") or the smallest ("area"). Then, around parts placed by
+    hand, the closest to their middle; otherwise the lowest-left (which leaves
+    the free space in one piece)."""
     floor_x, floor_y, Z = room
-    height, reach_x, reach_y = state
+    height, group, hug = state
     sx, sy, sz = shape.size
     nu = int(np.floor((floor_x - sx) / pitch + 1e-9)) + 1
     nv = int(np.floor((floor_y - sy) / pitch + 1e-9)) + 1
@@ -350,10 +420,19 @@ def _lowest_spot(shape: _Shape, skyline, r, room, pitch, state, rule):
         return None
     u, v = np.nonzero(fits)
     z, top = z[u, v], top[u, v]
-    rx, ry = np.maximum(reach_x, u * pitch + sx), np.maximum(reach_y, v * pitch + sy)
-    square, area = np.round(np.maximum(rx, ry), 6), np.round(rx * ry, 3)
-    compact = (square, area) if rule == "square" else (area, square)
-    keys = (np.round(np.maximum(height, top), 6), z, *compact, v, u)
+    x, y = u * pitch, v * pitch
+    if np.isfinite(group).all():
+        x0, y0 = np.minimum(group[0], x), np.minimum(group[1], y)
+        x1, y1 = np.maximum(group[2], x + sx), np.maximum(group[3], y + sy)
+        middle = np.hypot(x + sx / 2 - (group[0] + group[2]) / 2, y + sy / 2 - (group[1] + group[3]) / 2)
+    else:  # the first part: into the corner
+        x0, y0, x1, y1 = x, y, x + sx, y + sy
+        middle = x + y
+    w, d = x1 - x0, y1 - y0
+    square, area = np.round(np.maximum(w, d), 6), np.round(w * d, 3)
+    compact = (square, np.round(w + d, 6)) if rule == "square" else (area, square)
+    near = (np.round(middle, 6),) if hug else ()
+    keys = (np.round(np.maximum(height, top), 6), z, *compact, *near, v, u)
     k = np.lexsort(keys[::-1])[0]
     return tuple(float(key[k]) for key in keys), (int(u[k]), int(v[k]), int(z[k]))
 
@@ -364,13 +443,32 @@ def arrange(
     spacing: float = 3.0,
     allow_rotation: bool = True,
     names: list[str] | None = None,
+    spots: dict[int, Spot] | None = None,
 ) -> tuple[trimesh.Trimesh, list[Placement]]:
     """Pack `meshes` into `volume` and merge them into one mesh, ready to slice.
 
     Packs by box and by shape and keeps the lower build (then the smaller
-    footprint). The same mesh object may appear several times (copies); each
+    footprint). Parts with a `spots` entry stay there and the rest are packed
+    around them. The same mesh object may appear several times (copies); each
     gets its own place.
     """
+    return place(meshes, placements := plan(meshes, volume, spacing, allow_rotation, names, spots)), placements
+
+
+def plan(
+    meshes: list[trimesh.Trimesh],
+    volume,
+    spacing: float = 3.0,
+    allow_rotation: bool = True,
+    names: list[str] | None = None,
+    spots: dict[int, Spot] | None = None,
+) -> list[Placement]:
+    """Where `arrange` puts every part, without moving any mesh."""
+    if spots:
+        pinned = {i: placement_at(meshes[i], i, spot) for i, spot in spots.items()}
+        if len(pinned) == len(meshes):
+            return [pinned[i] for i in range(len(meshes))]
+        return pack_shapes(meshes, volume, spacing, allow_rotation, names, pinned)
     results, errors = [], []
     try:
         results.append(pack_boxes([m.extents for m in meshes], volume, spacing, allow_rotation, names))
@@ -384,8 +482,71 @@ def arrange(
             errors.append(e)
     if not results:
         raise max(errors, key=lambda e: e.placed)
-    placements = min(results, key=_build_size)
-    return place(meshes, placements), placements
+    return min(results, key=_build_size)
+
+
+def conflicts(
+    meshes: list[trimesh.Trimesh],
+    placements: list[Placement],
+    volume,
+    spacing: float,
+    names: list[str] | None = None,
+) -> list[str]:
+    """What's wrong with a build laid out by hand: parts outside the chamber or
+    closer than `spacing` to its walls or to each other. Empty if all is well.
+
+    Distances are measured between points on the surfaces about half a
+    millimetre apart, so a part is never reported too close when it isn't, but
+    one closer than the spacing by less than that can be missed.
+    """
+    X, Y, Z = volume
+    names = names or [f"part {i + 1}" for i in range(len(placements))]
+    parts = [_turned(meshes[p.item], p.turn).apply_translation(p.position) for p in placements]
+    problems = []
+    room = np.array([X / 2 - spacing, Y / 2 - spacing]) + 1e-6
+    for name, m in zip(names, parts):
+        (x0, y0, z0), (x1, y1, z1) = m.bounds
+        if (np.abs([x0, x1, y0, y1]) > np.repeat(room, 2)).any():
+            problems.append(f"{name} is closer than {spacing:g} mm to the chamber wall.")
+        if z0 < -1e-6 or z1 > Z + 1e-6:
+            problems.append(f"{name} sticks out of the build volume ({z0:.1f} to {z1:.1f} mm high).")
+    clouds: dict[int, tuple[np.ndarray, cKDTree]] = {}
+
+    def cloud(i):
+        if i not in clouds:
+            m = parts[i]
+            count = int(min(max(m.area / 0.25, 2000), 60000))
+            points, _ = trimesh.sample.sample_surface(m, count, seed=0)
+            points = np.vstack([points, m.vertices])
+            clouds[i] = (points, cKDTree(points))
+        return clouds[i]
+
+    for a, b in itertools.combinations(range(len(parts)), 2):
+        lo, hi = parts[a].bounds, parts[b].bounds
+        if (np.maximum(lo[0] - hi[1], hi[0] - lo[1]) >= spacing).any():
+            continue  # their boxes are far enough apart
+        (pa, ta), (pb, _) = cloud(a), cloud(b)
+        gap = float(ta.query(pb, distance_upper_bound=spacing)[0].min())
+        inside = _inside(parts[b], pa[0]) or _inside(parts[a], pb[0])
+        if inside or gap < spacing:
+            how = "inside each other" if inside else f"{gap:.1f} mm apart (spacing {spacing:g} mm)"
+            problems.append(f"{names[a]} and {names[b]} are {how}.")
+    return problems
+
+
+def _inside(mesh: trimesh.Trimesh, point: np.ndarray) -> bool:
+    """Is `point` inside the closed `mesh`? Counts the surfaces above it."""
+    px, py = point[:2] + (1.234e-7, 2.345e-7)  # off the edges, so no triangle counts twice
+    tri = mesh.triangles
+    (ax, ay, az), (bx, by, bz), (cx, cy, cz) = (tri[:, k].T for k in range(3))
+    det = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        u = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / det
+        v = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / det
+    w = 1 - u - v
+    hit = (det != 0) & (u >= 0) & (v >= 0) & (w >= 0)
+    z = u * az + v * bz + w * cz
+    return bool(np.count_nonzero(hit & (z > point[2])) % 2)
 
 
 def _build_size(placements: list[Placement]) -> tuple[float, float]:

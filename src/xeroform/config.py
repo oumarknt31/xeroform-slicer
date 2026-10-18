@@ -8,6 +8,10 @@ from .layers import ScanParams
 from .scan_order import SCAN_ORDERS
 
 
+# What a part in a build can set for itself, e.g. more power for a thick part.
+PART_SETTINGS = ("hatch_power", "hatch_speed", "contour_power", "contour_speed", "hatch_distance")
+
+
 @dataclass
 class SliceConfig:
     """All the knobs for one slice job. Tune per material (e.g. nylon PA12)."""
@@ -58,6 +62,16 @@ class SliceConfig:
             if len(self.build_volume) != 3 or not all(v > 0 for v in self.build_volume):
                 raise ValueError(f"build_volume must be 3 sizes > 0 (x, y, z), got {self.build_volume!r}")
             self.build_volume = tuple(float(v) for v in self.build_volume)
+
+    def for_part(self, own: dict | None) -> SliceConfig:
+        """These settings with a part's own values applied (keys from PART_SETTINGS).
+        Raises ValueError for an unknown key or a bad value."""
+        if not own:
+            return self
+        unknown = sorted(set(own) - set(PART_SETTINGS))
+        if unknown:
+            raise ValueError(f"a part can't have its own {', '.join(unknown)} (only {', '.join(PART_SETTINGS)})")
+        return replace(self, **{k: float(v) for k, v in own.items()})
 
     def laser_settings(self) -> LaserSettings:
         return LaserSettings(

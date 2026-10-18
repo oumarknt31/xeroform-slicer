@@ -1,4 +1,5 @@
-"""XeroForm command line:  xeroform input.stl [more.stl ...] -o output.cli"""
+"""XeroForm command line:  xeroform input.stl [more.stl ...] -o output.cli
+or:  xeroform build.xeroform -o output.cli"""
 
 from __future__ import annotations
 import argparse
@@ -6,13 +7,14 @@ import os
 import sys
 
 from . import __version__
-from .pipeline import slice_build, slice_job
+from .pipeline import slice_build, slice_job, slice_project
 from .nesting import NestingError
 from .orient import NO_ROTATION, lowest
 from .part import MeshError, prepare_mesh
 from .config import SliceConfig
 from .scan_order import SCAN_ORDERS
 from .preview import write_preview
+from .project import EXTENSION, Project, ProjectError
 from .summary import summary_lines
 
 
@@ -26,7 +28,8 @@ def main(argv=None) -> int:
         "inputs",
         nargs="+",
         metavar="input",
-        help="model file(s) (.stl, .obj, .3mf, ...); several are packed into one build",
+        help="model file(s) (.stl, .obj, .3mf, ...); several are packed into one build. Or one project "
+        f"({EXTENSION}), sliced with its own settings and layout - the options below don't apply to it",
     )
     ap.add_argument("-o", "--output", required=True, help="output file (.cli)")
     ap.add_argument("--layer", type=float, default=0.1, help="layer thickness in mm")
@@ -93,6 +96,10 @@ def main(argv=None) -> int:
         ap.error("--preview-every must be >= 1")
     if args.copies < 1:
         ap.error("--copies must be >= 1")
+    if any(path.lower().endswith(EXTENSION) for path in args.inputs):
+        if len(args.inputs) > 1:
+            ap.error(f"a project ({EXTENSION}) can't be combined with other inputs")
+        return _slice_project(args)
 
     try:
         cfg = SliceConfig(
@@ -129,6 +136,23 @@ def main(argv=None) -> int:
     if args.preview:
         title = os.path.basename(args.inputs[0]) if not several else f"build: {len(result.build.placements)} parts"
         write_preview(layers, args.preview, title=title, every=args.preview_every, jump_speed=cfg.jump_speed)
+        print(f"Preview -> {args.preview}")
+    return 0
+
+
+def _slice_project(args) -> int:
+    try:
+        project = Project.load(args.inputs[0])
+        result = slice_project(project, args.output)
+    except (ProjectError, MeshError, NestingError) as e:
+        print(f"xeroform: error: {e}", file=sys.stderr)
+        return 1
+    print("\n".join(summary_lines(result, project.config, args.output)))
+    if args.preview:
+        title = os.path.splitext(os.path.basename(args.inputs[0]))[0]
+        write_preview(
+            result.layers, args.preview, title=title, every=args.preview_every, jump_speed=project.config.jump_speed
+        )
         print(f"Preview -> {args.preview}")
     return 0
 

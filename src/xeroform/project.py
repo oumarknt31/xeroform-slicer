@@ -1,7 +1,7 @@
-"""Project files: which models to print (and how many copies) plus every setting.
+"""Project files: which models to print, how many copies and where, plus every setting.
 
-Saved as JSON with the extension .xeroform. Model paths are stored relative to the project file, so a project folder can be
-moved or shared as a whole.
+Saved as JSON with the extension .xeroform. Model paths are stored relative to
+the project file, so a project folder can be moved or shared as a whole.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 
 from .config import SliceConfig
+from .nesting import Spot
 
 EXTENSION = ".xeroform"
 FORMAT = "xeroform-project"
@@ -25,6 +26,8 @@ class ProjectPart:
     path: str  # absolute in memory; relative to the project file on disk
     copies: int = 1
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)  # degrees about X, then Y, then Z
+    settings: dict = field(default_factory=dict)  # the part's own values (config.PART_SETTINGS)
+    spots: list[Spot] = field(default_factory=list)  # where each copy is on the plate; fewer = pack the rest
 
 
 @dataclass
@@ -61,7 +64,13 @@ class Project:
         base = os.path.dirname(os.path.abspath(path))
         try:
             entries = [
-                (str(p["path"]), int(p.get("copies", 1)), _rotation(p.get("rotation", (0, 0, 0))))
+                (
+                    str(p["path"]),
+                    int(p.get("copies", 1)),
+                    _rotation(p.get("rotation", (0, 0, 0))),
+                    dict(p.get("settings", {})),
+                    [_spot(s) for s in p.get("spots", [])],
+                )
                 for p in data.get("parts", [])
             ]
         except (KeyError, TypeError, ValueError) as e:
@@ -76,16 +85,26 @@ class Project:
                     "Copy the model next to the project and add it again."
                 )
         parts = [
-            ProjectPart(os.path.normpath(os.path.join(base, raw)), copies, rotation)
-            for raw, copies, rotation in entries
+            ProjectPart(os.path.normpath(os.path.join(base, raw)), copies, rotation, own, spots[:copies])
+            for raw, copies, rotation, own, spots in entries
         ]
-        return cls(parts=parts, config=config_from_dict(data.get("settings", {})))
+        config = config_from_dict(data.get("settings", {}))
+        for part in parts:
+            try:
+                config.for_part(part.settings)
+            except (TypeError, ValueError) as e:
+                raise ProjectError(f"Invalid settings for {os.path.basename(part.path)} in project: {e}") from e
+        return cls(parts=parts, config=config)
 
 
 def _part_entry(part: ProjectPart, base: str) -> dict:
     entry = {"path": _relative(part.path, base), "copies": part.copies}
     if any(part.rotation):
         entry["rotation"] = [float(a) for a in part.rotation]
+    if part.settings:
+        entry["settings"] = {k: float(v) for k, v in part.settings.items()}
+    if part.spots:
+        entry["spots"] = [[float(x), float(y), float(z), int(turn)] for x, y, z, turn in part.spots]
     return entry
 
 
@@ -94,6 +113,13 @@ def _rotation(value) -> tuple[float, float, float]:
     if len(angles) != 3:
         raise ValueError("rotation needs three angles")
     return angles
+
+
+def _spot(value) -> Spot:
+    x, y, z, turn = value
+    if int(turn) % 90:
+        raise ValueError("a part turns about Z in steps of 90 degrees")
+    return float(x), float(y), float(z), int(turn) % 360
 
 
 def config_to_dict(config: SliceConfig) -> dict:

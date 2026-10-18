@@ -41,7 +41,7 @@ def slice_part(
     while (z := i * layer_thickness) < z_max:
         boundaries = part.raw_slice(z)
         if boundaries:
-            hatcher.hatchAngle = settings.angle_for_layer(len(layers))
+            hatcher.hatchAngle = settings.angle_for_layer(i - 1)  # by height, the same for every part
             pyslm_layer = hatcher.hatch(boundaries)
             layer = _to_layer(pyslm_layer, z, laser)
             _order_hatches(layer, settings.scan_order)
