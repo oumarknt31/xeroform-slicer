@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 
 import numpy as np
+import trimesh
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -25,10 +26,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import SliceConfig
+from ..nesting import Spot
 from ..orient import NO_ROTATION, Angles, extents
 from ..part import HUGE_MM, TINY_MM, MeshReport
 from ..project import ProjectPart
 from ..scan_order import SCAN_ORDERS
+from ..summary import describe_settings
 from . import theme
 from .widgets import Card, tool_button
 
@@ -125,15 +128,20 @@ NUMBER_FIELDS = {
 }
 
 
-@dataclass
+@dataclass(eq=False)
 class PartInfo:
-    """One model in the parts list, as loaded (unscaled, in the file's orientation)."""
+    """One model in the parts list, as loaded (unscaled, in the file's orientation),
+    with what the user chose for it."""
 
     path: str
     report: MeshReport
     hull: np.ndarray | None = None  # convex hull vertices, for instant size and orientation
     edges: np.ndarray | None = None  # (E, 2, 3) outline edges for the preview
     rotation: Angles = NO_ROTATION
+    mesh: trimesh.Trimesh | None = None  # repaired, on the plate: for laying the build out
+    display: trimesh.Trimesh | None = None  # a lighter copy, for drawing
+    settings: dict = field(default_factory=dict)  # its own values (config.PART_SETTINGS)
+    spots: list[Spot] = field(default_factory=list)  # where each copy is on the plate
 
     def size(self, scale: float = 1.0) -> np.ndarray:
         """Size (x, y, z) in mm at this scale and orientation."""
@@ -209,42 +217,80 @@ class PartsPanel(Card):
         hull: np.ndarray | None = None,
         edges: np.ndarray | None = None,
         rotation: Angles = NO_ROTATION,
-    ) -> None:
+        **more,
+    ) -> PartInfo:
+        """Add a row; `more` are further PartInfo fields (mesh, display, settings, spots)."""
+        info = PartInfo(path, report, hull, edges, tuple(rotation), **more)
+        self._add_row(info, copies)
+        self._update_count()
+        if self.table.currentRow() < 0:
+            self.table.selectRow(self.table.rowCount() - 1)
+        self.changed.emit()
+        return info
+
+    def _add_row(self, info: PartInfo, copies: int) -> None:
         r = self.table.rowCount()
         self.table.insertRow(r)
-        name = QTableWidgetItem(os.path.basename(path))
-        name.setData(Qt.UserRole, PartInfo(path, report, hull, edges, tuple(rotation)))
+        name = QTableWidgetItem(os.path.basename(info.path))
+        name.setData(Qt.UserRole, info)
         self.table.setItem(r, 0, QTableWidgetItem())
         self.table.setItem(r, 1, name)
         spin = QSpinBox()
         spin.setRange(1, 999)
         spin.setValue(copies)
         spin.setToolTip("How many copies of this model to pack into the build")
+        spin.setAccessibleName(f"Copies of {os.path.basename(info.path)}")
         spin.valueChanged.connect(self._update_count)
         spin.valueChanged.connect(self.changed)
         self.table.setCellWidget(r, 2, spin)
         self.table.setItem(r, 3, QTableWidgetItem())
         self._refresh_row(r)
+
+    def rows(self) -> list[tuple[PartInfo, int]]:
+        """Every row as (part, copies)."""
+        return [(self.info(r), self.table.cellWidget(r, 2).value()) for r in range(self.table.rowCount())]
+
+    def set_rows(self, rows: list[tuple[PartInfo, int]], selected: int = -1) -> None:
+        """Replace every row (e.g. going back to an earlier state), without emitting `changed`."""
+        self.table.blockSignals(True)
+        self.table.setRowCount(0)
+        for info, copies in rows:
+            self._add_row(info, copies)
+        self.table.blockSignals(False)
         self._update_count()
-        if self.table.currentRow() < 0:
+        if 0 <= selected < len(rows):
+            self.table.selectRow(selected)
+        self.selection_changed.emit(self.selected())
+
+    def selected_row(self) -> int:
+        rows = {i.row() for i in self.table.selectedIndexes()}
+        return min(rows) if rows else -1
+
+    def select_row(self, r: int) -> None:
+        if 0 <= r < self.table.rowCount() and r != self.selected_row():
             self.table.selectRow(r)
-        self.changed.emit()
 
     def info(self, r: int) -> PartInfo:
         return self.table.item(r, 1).data(Qt.UserRole)
 
     def selected(self) -> PartInfo | None:
-        rows = {i.row() for i in self.table.selectedIndexes()}
-        return self.info(min(rows)) if rows else None
+        r = self.selected_row()
+        return self.info(r) if r >= 0 else None
 
     def set_selected_rotation(self, rotation: Angles) -> None:
-        rows = {i.row() for i in self.table.selectedIndexes()}
-        if not rows:
+        r = self.selected_row()
+        if r < 0:
             return
-        r = min(rows)
         self.info(r).rotation = tuple(rotation)
         self._refresh_row(r)
         self.changed.emit()
+
+    def selected_settings_changed(self) -> None:
+        """The selected part's own settings were edited (in its PartInfo)."""
+        r = self.selected_row()
+        if r >= 0:
+            self._refresh_row(r)
+            self.changed.emit()
 
     def set_scale(self, scale: float) -> None:
         self.scale = scale
@@ -269,7 +315,11 @@ class PartsPanel(Card):
         status.setIcon(icon)
         tip = "\n".join([path, *notes]) if notes else f"{path}\nNo problems found."
         status.setToolTip(tip)
-        self.table.item(r, 1).setToolTip(tip)
+        name = self.table.item(r, 1)
+        if info.settings:
+            tip += f"\nOwn settings: {describe_settings(info.settings)}"
+        name.setIcon(theme.icon("laser", t["accent"]) if info.settings else QIcon())
+        name.setToolTip(tip)
 
     def remove_selected(self) -> None:
         rows = sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True)
@@ -303,17 +353,13 @@ class PartsPanel(Card):
 
     def parts(self) -> list[ProjectPart]:
         return [
-            ProjectPart(self.info(r).path, self.table.cellWidget(r, 2).value(), self.info(r).rotation)
-            for r in range(self.table.rowCount())
+            ProjectPart(info.path, copies, info.rotation, dict(info.settings), list(info.spots[:copies]))
+            for info, copies in self.rows()
         ]
-
-    def job_specs(self) -> list[tuple[str, Angles]]:
-        """Every part to print as (path, rotation), repeated once per copy."""
-        return [(p.path, p.rotation) for p in self.parts() for _ in range(p.copies)]
 
     def jobs(self) -> list[str]:
         """Every part to print, a path repeated once per copy."""
-        return [path for path, _ in self.job_specs()]
+        return [p.path for p in self.parts() for _ in range(p.copies)]
 
 
 class SettingsPanel(QWidget):
@@ -405,6 +451,31 @@ class SettingsPanel(QWidget):
     def _volume_toggled(self, on: bool) -> None:
         for s in self.volume:
             s.setEnabled(on)
+        self.changed.emit()
+
+    def state(self) -> dict:
+        """Every value as shown, for going back to it later (see set_state)."""
+        return {
+            **{k: s.value() for k, s in self.spins.items()},
+            "scan_order": self.scan_order.currentText(),
+            "allow_rotation": self.allow_rotation.isChecked(),
+            "use_volume": self.use_volume.isChecked(),
+            "volume": tuple(s.value() for s in self.volume),
+        }
+
+    def set_state(self, state: dict) -> None:
+        self.blockSignals(True)
+        try:
+            for k, spin in self.spins.items():
+                spin.setValue(state[k])
+            self.scan_order.setCurrentText(state["scan_order"])
+            self.allow_rotation.setChecked(state["allow_rotation"])
+            self.use_volume.setChecked(state["use_volume"])
+            for spin, v in zip(self.volume, state["volume"]):
+                spin.setValue(v)
+                spin.setEnabled(state["use_volume"])
+        finally:
+            self.blockSignals(False)
         self.changed.emit()
 
     def config(self) -> SliceConfig:

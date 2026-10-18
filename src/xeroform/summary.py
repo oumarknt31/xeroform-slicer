@@ -27,7 +27,7 @@ def summary_lines(result: SliceResult, config: SliceConfig, output: str | None =
         b = result.build
         turned = sum(p.rotated for p in b.placements)
         lines.append(
-            f"Build: {len(b.placements)} parts packed {b.height:.1f} mm high "
+            f"Build: {len(b.placements)} part{'s' if len(b.placements) != 1 else ''} packed {b.height:.1f} mm high "
             f"({turned} turned), packing density {b.density:.1%}"
         )
         lines += [f"  warning: {warning}" for warning in b.warnings]

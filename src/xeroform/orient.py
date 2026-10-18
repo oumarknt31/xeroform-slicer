@@ -6,6 +6,7 @@ on), so they stay fast on large meshes.
 """
 
 from __future__ import annotations
+import warnings
 
 import numpy as np
 import trimesh
@@ -31,7 +32,9 @@ def angles_of(rot: np.ndarray | Rotation) -> Angles:
     turns, so (0, 90, 0) rather than (180, -90, 180).
     """
     rot = rot if isinstance(rot, Rotation) else Rotation.from_matrix(rot)
-    x, y, z = rot.as_euler("xyz", degrees=True)
+    with warnings.catch_warnings():  # at a 90 degree tilt the X and Z turns are one: either form is fine
+        warnings.simplefilter("ignore", UserWarning)
+        x, y, z = rot.as_euler("xyz", degrees=True)
     other = (x + 180, 180 - y, z + 180)
     options = [tuple(_tidy(_wrap(a)) for a in angles) for angles in ((x, y, z), other)]
     return min(options, key=lambda angles: sum(abs(a) for a in angles))
@@ -102,6 +105,13 @@ def lay_flat(points: np.ndarray, face: int = 0) -> Angles:
     faces = flat_faces(points)
     normal, _ = faces[face % len(faces)]
     return _settle(points, _onto_plate(normal))
+
+
+def onto_face(points: np.ndarray, normal: np.ndarray) -> Angles:
+    """Orientation that rests the part on the face with outward `normal` (in the
+    model's own frame), e.g. a face clicked in a 3D view."""
+    normal = np.asarray(normal, dtype=float)
+    return _settle(points, _onto_plate(normal / np.linalg.norm(normal)))
 
 
 def lowest(points: np.ndarray) -> Angles:

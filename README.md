@@ -16,7 +16,7 @@ It comes as a desktop app for macOS, Windows and Linux, a command-line tool and
 a Python library, built on the open-source [PySLM](https://pyslm.readthedocs.io)
 slicing library.
 
-![XeroForm slicing a batch of nine parts, one layer shown from above](docs/images/xeroform-layers.png)
+![XeroForm with nine parts packed onto the plate, shown in 3D](docs/images/xeroform-plate.png)
 
 ## Install the app
 
@@ -46,37 +46,52 @@ Start it from Applications, the Start menu or your app menu, or run
 - **Parts**: add models, or drop them on the window, and set copies per model. A
   warning icon marks a model with repairs or a likely units problem; hover it
   for details.
+- **Plate**: every copy of every part in 3D, where it will be printed. Parts are
+  packed automatically as you add them. Drag a part to move it (it then stays
+  where you put it, and new copies are packed around it); *Arrange* packs
+  everything again. Parts too close together or to the walls turn red, with the
+  reason under the view. The angled and top-view buttons set the camera; drag
+  empty space to orbit, right-drag to pan, scroll to zoom.
 - **Orientation**: turn the selected part with X/Y/Z angles or ±90° buttons.
   *Lay flat* rests it on its largest flat face (click again for the next face),
-  and *Lowest height* turns it for the fewest layers, which is the fastest and
-  cheapest way to print it. A 3D preview shows the part on the plate, and the
-  size and layer count update as you turn it.
+  *Pick a face* lets you click the face to rest it on in the plate view, and
+  *Lowest height* turns it for the fewest layers, which is the fastest and
+  cheapest way to print it. The size and layer count update as you turn it.
+- **Part settings**: give the selected part its own laser power, speed and hatch
+  spacing, for example more power for a thick part in a build of thin ones.
+  Parts with their own settings have a laser mark in the list.
 - **Settings**: grouped in collapsible cards, each with a tooltip. *Reset to
   defaults* restores them. The build volume starts as a 150 mm placeholder until
   the machine is known.
+- **Undo and redo** (⌘Z / Ctrl+Z, ⇧⌘Z / Ctrl+Shift+Z) for every change to the
+  parts, their places and the settings.
 - **Slice** (⌘R / Ctrl+R): runs in the background with progress and Cancel.
   Tiles show layers, build height, laser time, parts, packing density and energy
   density; the full report is under *Details*.
-- **Views**, with a vertical layer slider (←/→, PgUp/PgDn ±10, Home/End):
+- **Views** of the slice, with a vertical layer slider (←/→, PgUp/PgDn ±10,
+  Home/End):
   - *Layers*: one layer from above with outlines, hatches, travel moves, scan
     order and a mm grid. **Play laser** (Space) animates the laser tracing the
     layer in scan order.
   - *3D*: the sliced contours stacked in 3D. Drag to orbit, scroll to zoom.
-  - *Build layout*: every packed part from above, coloured by stacking level.
   - **Play layers** runs through the build like a flip-book.
 - **Out of date**: if you change a part or setting after slicing, a banner says
   so and exporting stays blocked until you slice again.
-- **Projects** (`.xeroform`, JSON): save the parts list and every setting. Model
-  paths are stored relative to the project file.
+- **Projects** (`.xeroform`, JSON): save the parts, their orientation and own
+  settings, every setting, and where parts were placed by hand. Model paths are
+  stored relative to the project file.
 - **Export** (⌘E / Ctrl+E) writes the `.cli` file. Nothing is written before
   that.
+- **Updates**: once a day XeroForm asks GitHub whether a newer version is out
+  and, if so, shows *Update to …* in the header with the command that updates
+  it. Turn this off under *Help*, or check by hand there.
 - **Look**: dark graphite with a laser-orange accent, or a soft-grey light mode.
   The moon/sun button in the header switches between dark, light and system.
 
 The window remembers its size, theme, last folder and last settings. Unexpected
 errors show their details and go to a log file (*Help ▸ Show Log File*).
 
-![The same build in the 3D view, with the selected layer as an orange cut](docs/images/xeroform-3d.png)
+![The same build sliced: one layer from above, outlines in orange and holes in blue](docs/images/xeroform-layers.png)
 
 ## Use the command line
 
@@ -102,6 +117,9 @@ xeroform bracket.stl gear.stl --copies 5 -o build.cli --build-volume 150 150 150
 # laser settings in W and mm/s (the defaults are placeholders)
 xeroform model.stl -o model.cli --hatch-power 5 --hatch-speed 500 \
     --contour-power 4 --contour-speed 400 --jump-speed 2000
+
+# a project saved in the app, with its own settings, parts' settings and layout
+xeroform build.xeroform -o build.cli
 ```
 
 Run `xeroform --help` for every option and `xeroform --version` for the version. `python -m xeroform` works too.
@@ -115,6 +133,9 @@ Before slicing, XeroForm checks each model:
   changed.
 - **Refuses** models it can't slice correctly, such as large gaps in the surface,
   no volume or unreadable files, with a message saying what to do.
+- **Combines** shells that touch or overlap (a model built from several solids):
+  they print as one solid, while a cavity modelled as an inside-out shell stays
+  hollow.
 - **Warns** when the size suggests wrong units. STL files carry no units, so
   inch CAD parts arrive 25.4 times too small; fix that with `--scale 25.4`.
 - **Centres** the part on the plate (x = y = 0 is the middle, z = 0 the bottom)

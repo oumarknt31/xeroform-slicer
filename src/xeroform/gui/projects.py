@@ -88,6 +88,7 @@ class ProjectsMixin:
         self._clear()
         self.settings.set_config(gui_defaults())
         self.project_path, self.dirty = None, False
+        self.history.reset()
         self._refresh()
 
     def open_project(self, path: str | None = None) -> Task | None:
@@ -117,15 +118,23 @@ class ProjectsMixin:
                 "These models were not found and are left out:\n\n" + "\n".join(p.path for p in missing),
             )
 
+        self.hand_placed = any(p.spots for p in found)  # saved places are always placed by hand
+
         def done():
             self.dirty = bool(missing)
+            self.history.reset()
             self._refresh()
 
         if not found:
             done()
             return None
         return self.add_models(
-            [p.path for p in found], [p.copies for p in found], [p.rotation for p in found], then=done
+            [p.path for p in found],
+            [p.copies for p in found],
+            [p.rotation for p in found],
+            then=done,
+            settings=[p.settings for p in found],
+            spots=[p.spots for p in found],
         )
 
     def save_project(self) -> bool:
@@ -143,8 +152,12 @@ class ProjectsMixin:
         return self._write_project(path)
 
     def _write_project(self, path: str) -> bool:
+        parts = self.parts.parts()
+        if not self.hand_placed:  # packed automatically: opening the project packs it the same way
+            for part in parts:
+                part.spots = []
         try:
-            Project(parts=self.parts.parts(), config=self.settings.config()).save(path)
+            Project(parts=parts, config=self.settings.config()).save(path)
         except (OSError, ValueError) as e:
             QMessageBox.warning(self, "Can't save project", f"Could not write {path}:\n{e}")
             return False

@@ -1,10 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-18)
 
+- The plate in 3D: every copy of every part where it will be printed. Drag a
+  part to move it, click a face to lay the part flat on it (*Pick a face*), and
+  *Arrange* to pack everything again. Parts too close together or to the walls
+  turn red, with the reason under the view.
 - Packing goes by the parts' real shapes, not their bounding boxes: parts sit
   inside rings and cups and in the corners of brackets. Builds of irregular
-  parts come out up to a third lower.
+  parts come out up to a third lower. Parts placed by hand stay put and new
+  copies are packed around them.
+- Parts can have their own laser power, speed and hatch spacing (*Part
+  settings*).
+- Undo and redo for every change to the parts and settings.
+- XeroForm says when a newer version is out, with the command that updates it
+  (once a day; can be turned off under *Help*).
+- Shells that touch or overlap are sliced as one solid instead of as a tangle
+  of outlines; cavities modelled as inside-out shells stay hollow.
+- The command line slices a saved project: `xeroform build.xeroform -o build.cli`.
+- Projects save the parts' own settings and the places of parts placed by hand.
+
 ## 0.3.0 (2026-10-18)
 
 - Orient parts in the app: X/Y/Z angles, ±90° turns, *Lay flat* (rests the

@@ -1,5 +1,6 @@
-"""The Orientation card: turn the selected part, lay it flat, or find its lowest height,
-with a small 3D preview of the part on the plate."""
+"""The Orientation card: turn the selected part, lay it flat (on its next flat face, or
+on a face clicked in the plate view), or find its lowest height, with a small 3D
+preview of the part on the plate."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from PySide6.QtCore import QLineF, QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPolygonF
 from PySide6.QtWidgets import QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from ..orient import NO_ROTATION, Angles, flat_faces, lay_flat, lowest, matrix, turn
+from ..orient import NO_ROTATION, Angles, flat_faces, lay_flat, lowest, matrix, onto_face, turn
 from . import theme
 from .views import _alpha, _pen, paint_canvas
 from .widgets import Card, tool_button
@@ -22,9 +23,12 @@ SHARP_DEGREES = 25  # an edge between faces bent more than this is drawn
 
 def outline_edges(mesh: trimesh.Trimesh) -> np.ndarray:
     """(E, 2, 3) edges that show a part's shape: its sharp edges, or for smooth
-    organic shapes a thinned-out wireframe. Centred on the part."""
-    sharp = mesh.face_adjacency_edges[mesh.face_adjacency_angles > np.radians(SHARP_DEGREES)]
-    if len(sharp) < 300:
+    shapes every edge where the surface bends, thinned out. Centred on the part."""
+    angles = mesh.face_adjacency_angles
+    sharp = mesh.face_adjacency_edges[angles > np.radians(SHARP_DEGREES)]
+    if len(sharp) < 300:  # few corners (curved surfaces): every bend, but not the diagonals of flat faces
+        sharp = mesh.face_adjacency_edges[angles > np.radians(1)]
+    if not len(sharp):
         sharp = mesh.edges_unique
     if len(sharp) > EDGE_LIMIT:
         sharp = sharp[np.linspace(0, len(sharp) - 1, EDGE_LIMIT).astype(int)]
@@ -101,9 +105,11 @@ class PartPreview(QWidget):
 
 
 class OrientationPanel(Card):
-    """Orient the part selected in the parts list. Emits `rotation_changed` on edits."""
+    """Orient the part selected in the parts list. Emits `rotation_changed` on edits,
+    and `picking_changed` when face picking (in the plate view) starts or stops."""
 
     rotation_changed = Signal(tuple)
+    picking_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__("Orientation", parent=parent)
@@ -173,6 +179,12 @@ class OrientationPanel(Card):
             actions.addWidget(b)
         actions.addStretch()
         ed.addLayout(actions)
+        self.pick_button = tool_button(
+            "pick-face", "Pick a face", "Click a face of the part in the plate view to rest it on"
+        )
+        self.pick_button.setCheckable(True)
+        self.pick_button.toggled.connect(self.picking_changed)
+        ed.addWidget(self.pick_button, 0, Qt.AlignLeft)
 
         self.info = QLabel()
         self.info.setObjectName("muted")
@@ -186,6 +198,8 @@ class OrientationPanel(Card):
     def set_part(self, part) -> None:
         self.part = part
         self._next_face, self._resting_face = 0, None
+        if part is None:
+            self.pick_button.setChecked(False)
         self.placeholder.setVisible(part is None)
         self.editor.setVisible(part is not None)
         self.name.setText("" if part is None else part.path.replace("\\", "/").rsplit("/", 1)[-1])
@@ -229,6 +243,11 @@ class OrientationPanel(Card):
         if self.part is not None and self.part.hull is not None:
             self._apply(lowest(self.part.hull))
 
+    def lay_on_face(self, normal) -> None:
+        """Rest the part on the face with this outward normal (model file frame)."""
+        if self.part is not None and self.part.hull is not None:
+            self._apply(onto_face(self.part.hull, normal))
+
     # --- display -----------------------------------------------------------------
 
     def _show(self) -> None:
@@ -252,7 +271,7 @@ class OrientationPanel(Card):
         super().restyle()
         for b in [
             *getattr(self, "turn_buttons", []),
-            *(getattr(self, n, None) for n in ("flat_button", "lowest_button", "reset_button")),
+            *(getattr(self, n, None) for n in ("flat_button", "lowest_button", "reset_button", "pick_button")),
         ]:
             if b is not None:
                 b.setIcon(theme.icon(b.property("iconName")))

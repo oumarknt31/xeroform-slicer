@@ -34,6 +34,7 @@ class NestingError(ValueError):
     """The parts don't fit in the build volume."""
 
     placed = 0  # how many parts did fit
+    placements: list = []  # where those went (not centred)
 
 
 Spot = tuple[float, float, float, int]  # centre x, centre y and bottom z (mm) of a part, turn about Z (deg)
@@ -120,11 +121,11 @@ def pack_boxes(
         placed = (sy, sx, sz) if rotated else (sx, sy, sz)
         placements[i] = Placement(i, (x0 + s - X / 2, y0 + s - Y / 2, z0), 90 if rotated else 0, placed)
     if left_out:
-        raise _left_over(left_out, len(sizes), names, volume, spacing)
+        raise _left_over(left_out, len(sizes), names, volume, spacing, placements)
     return _centre([placements[i] for i in range(len(sizes))])
 
 
-def _left_over(left_out: list[int], total: int, names: list[str], volume, spacing: float) -> NestingError:
+def _left_over(left_out: list[int], total: int, names: list[str], volume, spacing: float, placed) -> NestingError:
     counts: dict[str, int] = {}
     for i in left_out:
         counts[names[i]] = counts.get(names[i], 0) + 1
@@ -136,6 +137,7 @@ def _left_over(left_out: list[int], total: int, names: list[str], volume, spacin
         "Use fewer copies, a smaller spacing, or a second build."
     )
     error.placed = total - len(left_out)
+    error.placements = [placed[i] for i in sorted(placed)]
     return error
 
 
@@ -385,7 +387,7 @@ def _pack_shapes(meshes, sizes, volume, spacing, allow_rotation, names, rule, sh
         position = tuple(float(c) for c in corner + (x, y, z * pitch))
         placements[i] = Placement(i, position, turn, tuple(float(v) for v in shape.size))
     if left_out:
-        raise _left_over(left_out, len(meshes), names, volume, spacing)
+        raise _left_over(left_out, len(meshes), names, volume, spacing, placements)
     placed = [placements[i] for i in range(len(meshes))]
     return placed if pinned else _centre(placed)
 
@@ -485,37 +487,45 @@ def plan(
     return min(results, key=_build_size)
 
 
-def conflicts(
+@dataclass(frozen=True)
+class Problem:
+    message: str
+    parts: tuple[int, ...]  # indices of the parts involved
+
+
+def problems(
     meshes: list[trimesh.Trimesh],
     placements: list[Placement],
     volume,
     spacing: float,
     names: list[str] | None = None,
-) -> list[str]:
+    samples: int = 60000,
+) -> list[Problem]:
     """What's wrong with a build laid out by hand: parts outside the chamber or
     closer than `spacing` to its walls or to each other. Empty if all is well.
 
-    Distances are measured between points on the surfaces about half a
-    millimetre apart, so a part is never reported too close when it isn't, but
-    one closer than the spacing by less than that can be missed.
+    Distances are measured between points on the surfaces (up to `samples` per
+    part, about half a millimetre apart), so a part is never reported too close
+    when it isn't, but one closer than the spacing by less than that can be
+    missed.
     """
     X, Y, Z = volume
     names = names or [f"part {i + 1}" for i in range(len(placements))]
     parts = [_turned(meshes[p.item], p.turn).apply_translation(p.position) for p in placements]
-    problems = []
+    found = []
     room = np.array([X / 2 - spacing, Y / 2 - spacing]) + 1e-6
-    for name, m in zip(names, parts):
+    for i, (name, m) in enumerate(zip(names, parts)):
         (x0, y0, z0), (x1, y1, z1) = m.bounds
         if (np.abs([x0, x1, y0, y1]) > np.repeat(room, 2)).any():
-            problems.append(f"{name} is closer than {spacing:g} mm to the chamber wall.")
+            found.append(Problem(f"{name} is closer than {spacing:g} mm to the chamber wall.", (i,)))
         if z0 < -1e-6 or z1 > Z + 1e-6:
-            problems.append(f"{name} sticks out of the build volume ({z0:.1f} to {z1:.1f} mm high).")
+            found.append(Problem(f"{name} sticks out of the build volume ({z0:.1f} to {z1:.1f} mm high).", (i,)))
     clouds: dict[int, tuple[np.ndarray, cKDTree]] = {}
 
     def cloud(i):
         if i not in clouds:
             m = parts[i]
-            count = int(min(max(m.area / 0.25, 2000), 60000))
+            count = int(min(max(m.area / 0.25, 2000), samples))
             points, _ = trimesh.sample.sample_surface(m, count, seed=0)
             points = np.vstack([points, m.vertices])
             clouds[i] = (points, cKDTree(points))
@@ -530,8 +540,8 @@ def conflicts(
         inside = _inside(parts[b], pa[0]) or _inside(parts[a], pb[0])
         if inside or gap < spacing:
             how = "inside each other" if inside else f"{gap:.1f} mm apart (spacing {spacing:g} mm)"
-            problems.append(f"{names[a]} and {names[b]} are {how}.")
-    return problems
+            found.append(Problem(f"{names[a]} and {names[b]} are {how}.", (a, b)))
+    return found
 
 
 def _inside(mesh: trimesh.Trimesh, point: np.ndarray) -> bool:

@@ -17,7 +17,7 @@ from .orient import NO_ROTATION, Angles
 from .part import Part, MeshError, MeshReport, prepare_mesh
 from .hatching import HatchSettings
 from .layers import Layer
-from .nesting import Placement, Spot, conflicts, place, plan
+from .nesting import Placement, Spot, place, plan, problems
 from .project import Project
 from .slicing import slice_part
 from .export import get_exporter
@@ -122,7 +122,10 @@ def slice_build(
     names = [os.path.basename(input_paths[k]) for k in jobs]
     pinned = {j: spot for j, spot in enumerate(spots or []) if spot is not None}
     placements = plan(meshes, config.build_volume, config.part_spacing, config.allow_rotation, names, pinned)
-    warnings = conflicts(meshes, placements, config.build_volume, config.part_spacing, names) if pinned else []
+    warnings = []
+    if pinned:
+        found = problems(meshes, placements, config.build_volume, config.part_spacing, names)
+        warnings = [p.message for p in found]
 
     groups: dict[tuple, list[Placement]] = {}  # parts sliced together: the same settings
     for p in placements:

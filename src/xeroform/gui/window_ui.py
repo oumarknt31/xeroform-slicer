@@ -21,9 +21,11 @@ from PySide6.QtWidgets import (
 
 from . import theme
 from .constants import APP_NAME
+from .model_view import ModelView
 from .orientation import OrientationPanel
 from .panels import PartsPanel, SettingsPanel
-from .views import LayerView, LayoutView, StackView
+from .part_settings import PartSettingsPanel
+from .views import LayerView, StackView
 from .widgets import Card, EmptyState, Segmented, StatTile, chip, spaced, tool_button
 
 
@@ -71,6 +73,15 @@ class WindowLayoutMixin:
         self.header_add.clicked.connect(self.add_models_dialog)
         for b in (self.open_button, self.save_button, self.header_add):
             row.addWidget(b)
+        row.addSpacing(6)
+        self.undo_button = tool_button("undo", "", "Undo (⌘Z)")
+        self.undo_button.setAccessibleName("Undo")
+        self.undo_button.clicked.connect(self.undo)
+        self.redo_button = tool_button("redo", "", "Redo (⇧⌘Z)")
+        self.redo_button.setAccessibleName("Redo")
+        self.redo_button.clicked.connect(self.redo)
+        row.addWidget(self.undo_button)
+        row.addWidget(self.redo_button)
         row.addStretch()
 
         # the project, as a pill in the middle
@@ -92,6 +103,11 @@ class WindowLayoutMixin:
         row.addWidget(pill)
         row.addStretch()
 
+        self.update_button = tool_button("update", "Update available", "A newer XeroForm is out: how to update")
+        self.update_button.setObjectName("updatePill")
+        self.update_button.clicked.connect(self.show_update)
+        self.update_button.hide()
+        row.addWidget(self.update_button)
         self.theme_button = tool_button("moon", "", "Theme: switch between dark, light and system")
         self.theme_button.clicked.connect(self._cycle_theme)
         row.addWidget(self.theme_button)
@@ -116,10 +132,12 @@ class WindowLayoutMixin:
         col.setSpacing(10)
         self.parts = PartsPanel()
         self.orientation = OrientationPanel()
+        self.part_settings = PartSettingsPanel()
         self.settings = SettingsPanel()
-        self._themed += [self.parts, self.orientation, self.settings]
+        self._themed += [self.parts, self.orientation, self.part_settings, self.settings]
         col.addWidget(self.parts)
         col.addWidget(self.orientation)
+        col.addWidget(self.part_settings)
         col.addWidget(self.settings)
         col.addStretch()
         scroll = QScrollArea()
@@ -182,11 +200,28 @@ class WindowLayoutMixin:
         vc.setSpacing(8)
 
         top = QHBoxLayout()
-        self.view_switch = Segmented([("Layers", "slice"), ("3D", "cube"), ("Build layout", "layout")])
+        self.view_switch = Segmented([("Plate", "cube"), ("Layers", "slice"), ("3D", "perspective")])
         self.view_switch.changed.connect(self._view_changed)
         self._themed.append(self.view_switch)
         top.addWidget(self.view_switch)
-        top.addStretch()
+        # the tools for the view shown: the plate's, the layers' view options, or none
+        self.toolbar = QStackedWidget()
+        plate_tools, layer_tools = QWidget(), QWidget()
+        pt, lt = QHBoxLayout(plate_tools), QHBoxLayout(layer_tools)
+        for row in (pt, lt):
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addStretch()
+        self.arrange_button = tool_button("arrange", "Arrange", "Pack every part again, as tight and low as possible")
+        self.arrange_button.clicked.connect(lambda: self.arrange())
+        self.perspective_button = tool_button("perspective", "", "Look at the plate from an angle")
+        self.perspective_button.setAccessibleName("Angled view")
+        self.perspective_button.clicked.connect(lambda: self.model_view.reset_view())
+        self.top_button = tool_button("top-view", "", "Look straight down on the plate")
+        self.top_button.setAccessibleName("Top view")
+        self.top_button.clicked.connect(lambda: self.model_view.top_view())
+        self.plate_controls = [self.arrange_button, self.perspective_button, self.top_button]
+        for b in self.plate_controls:
+            pt.addWidget(b)
         self.chips = {}
         for text, name, on, tip in [
             ("Outlines", "show_contours", True, "Part outlines (holes in blue)"),
@@ -197,9 +232,11 @@ class WindowLayoutMixin:
         ]:
             c = chip(text, on, tip)
             c.toggled.connect(lambda checked, n=name: self._set_view_option(n, checked))
-            _keep_space(c)
             self.chips[name] = c
-            top.addWidget(c)
+            lt.addWidget(c)
+        for page in (plate_tools, layer_tools, QWidget()):
+            self.toolbar.addWidget(page)
+        top.addWidget(self.toolbar, 1)
         self.fit_button = tool_button("fit", "", "Fit the view (⌘0)")
         self.fit_button.setAccessibleName("Fit the view")
         self.fit_button.clicked.connect(self._fit_views)
@@ -217,13 +254,14 @@ class WindowLayoutMixin:
         sl = QHBoxLayout(stage)
         sl.setContentsMargins(0, 0, 0, 0)
         self.views = QStackedWidget()
+        self.model_view = ModelView()
         self.view = LayerView()
         self.stack_view = StackView()
-        self.layout_view = LayoutView()
+        self._themed.append(self.model_view)
         for v, name in (
+            (self.model_view, "Parts on the plate"),
             (self.view, "Layer view"),
             (self.stack_view, "3D layer stack"),
-            (self.layout_view, "Build layout"),
         ):
             v.setAccessibleName(name)
             self.views.addWidget(v)
@@ -326,13 +364,19 @@ class WindowLayoutMixin:
         self.act_save = action("&Save Project", self.save_project, QKeySequence.Save)
         self.act_save_as = action("Save Project &As…", self.save_project_as, QKeySequence.SaveAs)
         self.act_add = action("&Add Models…", self.add_models_dialog, QKeySequence("Ctrl+I"))
+        self.act_undo = action("&Undo", self.undo, QKeySequence.Undo)
+        self.act_redo = action("&Redo", self.redo, QKeySequence.Redo)
         self.act_slice = action("S&lice", self.start_slicing, QKeySequence("Ctrl+R"))
+        self.act_arrange = action("&Arrange Parts", lambda: self.arrange(), QKeySequence("Ctrl+Shift+A"))
         self.act_export = action("&Export Laser Paths (.cli)…", self.export_cli, QKeySequence("Ctrl+E"))
         self.act_preview = action("Export &Preview (.html)…", self.export_preview)
         self.act_quit = action("&Quit", self.close, QKeySequence.Quit)
         self.act_fit = action("&Fit View", self._fit_views, QKeySequence("Ctrl+0"))
         self.act_about = action(f"&About {APP_NAME}", self.about)
         self.act_log = action("Show &Log File", self.show_log)
+        self.act_check_updates = action("Check for &Updates…", lambda: self.check_for_updates(by_hand=True))
+        self.act_auto_updates = action("Check for Updates &Automatically", self._auto_updates_toggled)
+        self.act_auto_updates.setCheckable(True)
 
         bar = self.menuBar()
         file_menu = bar.addMenu("&File")
@@ -346,7 +390,9 @@ class WindowLayoutMixin:
         file_menu.addActions([self.act_export, self.act_preview])
         file_menu.addSeparator()
         file_menu.addAction(self.act_quit)
-        bar.addMenu("&Build").addAction(self.act_slice)
+        edit_menu = bar.addMenu("&Edit")
+        edit_menu.addActions([self.act_undo, self.act_redo])
+        bar.addMenu("&Build").addActions([self.act_arrange, self.act_slice])
         view_menu = bar.addMenu("&View")
         view_menu.addAction(self.act_fit)
         theme_menu = view_menu.addMenu("&Theme")
@@ -354,3 +400,5 @@ class WindowLayoutMixin:
             theme_menu.addAction(mode.capitalize(), lambda m=mode: self.set_theme(m))
         help_menu = bar.addMenu("&Help")
         help_menu.addActions([self.act_about, self.act_log])
+        help_menu.addSeparator()
+        help_menu.addActions([self.act_check_updates, self.act_auto_updates])

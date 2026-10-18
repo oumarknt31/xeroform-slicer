@@ -30,7 +30,7 @@ def _setup_logging() -> str:
 
 def smoke_test() -> int:
     """Check that this build works end to end: load, orient, slice and export a model,
-    then open the window.
+    open the window, and have HTTPS for the update check.
 
     Used on every packaged app before it is published. Settings go to a temporary
     folder so the check leaves nothing behind.
@@ -39,6 +39,7 @@ def smoke_test() -> int:
 
     import trimesh
     from PySide6.QtCore import QSettings
+    from PySide6.QtNetwork import QSslSocket
     from PySide6.QtWidgets import QApplication
 
     from ..config import SliceConfig
@@ -60,12 +61,15 @@ def smoke_test() -> int:
         app.processEvents()
         window.dirty = False
         window.close()
-        ok = len(layers) == 9 and os.path.getsize(out) > 0
-    print(f"XeroForm smoke test: {'ok' if ok else 'FAILED'} ({len(layers)} layers)")
+        tls = QSslSocket.supportsSsl()
+        ok = len(layers) == 9 and os.path.getsize(out) > 0 and tls
+    backend = QSslSocket.activeBackend() if tls else "none"
+    print(f"XeroForm smoke test: {'ok' if ok else 'FAILED'} ({len(layers)} layers, TLS: {backend})")
     return 0 if ok else 1
 
 
 def main(argv: list[str] | None = None) -> int:
+    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .. import __version__
@@ -105,4 +109,5 @@ def main(argv: list[str] | None = None) -> int:
     elif files:
         window.add_models(files)
     window.show()
+    QTimer.singleShot(3000, window.check_for_updates)  # once a day at most, unless switched off
     return app.exec()

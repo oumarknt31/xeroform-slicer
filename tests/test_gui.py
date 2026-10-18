@@ -107,13 +107,9 @@ def test_slice_view_layout_and_export(window, models, tmp_path, monkeypatch):
     window._goto(10**9)
     assert window.slider.value() == 18
 
-    items = window.layout_view.items
-    assert sorted(i[1] for i in items) == ["cube.stl", "ring.stl"]
-    rect = next(i[0] for i in items if i[1] == "ring.stl")
-    assert window.layout_view.item_at(window.layout_view.transform().map(rect.center()))[1] == "ring.stl"
     for name in ("show_travel", "scan_order"):
         window.view.set_option(name, True)
-    assert not window.view.grab().isNull() and not window.layout_view.grab().isNull()
+    assert not window.view.grab().isNull()
 
     out = tmp_path / "gui.cli"
     monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (str(out), ""))
@@ -206,7 +202,7 @@ def test_error_is_shown(window, models):
 def test_unexpected_error_shows_details(window, models, monkeypatch):
     import xeroform.gui.window as win
 
-    monkeypatch.setattr(win, "slice_job", lambda *a, **k: 1 / 0)
+    monkeypatch.setattr(win, "slice_project", lambda *a, **k: 1 / 0)
     shown = []
     monkeypatch.setattr(QMessageBox, "exec", lambda self: shown.append(self.detailedText()))
     wait(window.add_models([models[0]]))
@@ -235,10 +231,11 @@ def test_empty_states(window, models):
     assert window.pages.currentIndex() == 0 and window.empty.title.text() == "Drop models here"
     assert window.parts.table.isHidden() and not window.parts.empty_hint.isHidden()
     wait(window.add_models([models[0]]))
-    assert window.empty.title.text() == "Ready to slice" and window.parts.empty_hint.isHidden()
+    assert window.pages.currentIndex() == 1 and window.views.currentWidget() is window.model_view
+    assert window.parts.empty_hint.isHidden()
     window.settings.spins["layer_thickness"].setValue(1)
     wait(window.start_slicing())
-    assert window.pages.currentIndex() == 1
+    assert window.views.currentWidget() is window.view  # the layers, once sliced
 
 
 def test_stat_tiles(window, models):
@@ -252,7 +249,7 @@ def test_stat_tiles(window, models):
 
 def test_3d_stack_view(window, models):
     sliced(window, models)
-    window.view_switch.set_index(1)
+    window.view_switch.set_index(2)
     assert window.views.currentWidget() is window.stack_view
     assert len(window.stack_view.layers) == 19
     window.slider.setValue(7)
@@ -271,8 +268,8 @@ def test_3d_stack_view(window, models):
         }[kind](ev)
     assert sv.yaw != yaw  # orbited
     assert not sv.grab().isNull()
-    window.view_switch.set_index(2)
-    assert window.slider.isHidden()  # layers don't apply to the layout view
+    window.view_switch.set_index(0)
+    assert window.slider.isHidden()  # layers don't apply to the plate
 
 
 def test_laser_playback(window, models):
@@ -409,3 +406,276 @@ def test_project_keeps_orientation(window, tall_model, tmp_path, monkeypatch):
     window.new_project()
     wait(window.open_project(path))
     assert window.parts.table.item(0, 3).text() == "60.0 × 20.0 × 10.0"
+
+
+# --- the plate ----------------------------------------------------------------
+
+
+def settle(window):
+    """Wait until the parts are laid out (the debounce timer and any arranging)."""
+    for _ in range(400):
+        QtWidgets.QApplication.processEvents()
+        if not window.layout_timer.isActive() and not window.busy():
+            break
+        loop = QEventLoop()
+        QTimer.singleShot(15, loop.quit)
+        loop.exec()
+    for _ in range(3):
+        QtWidgets.QApplication.processEvents()
+
+
+def mouse(view, kind, pos, button=Qt.LeftButton):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QMouseEvent
+
+    buttons = Qt.NoButton if kind == QEvent.MouseButtonRelease else button
+    ev = QMouseEvent(kind, QPointF(*pos), QPointF(*pos), button, buttons, Qt.NoModifier)
+    {
+        QEvent.MouseButtonPress: view.mousePressEvent,
+        QEvent.MouseMove: view.mouseMoveEvent,
+        QEvent.MouseButtonRelease: view.mouseReleaseEvent,
+    }[kind](ev)
+
+
+def screen_point(view, row, copy=0, normal=None):
+    """Where on screen a part (or one of its faces facing `normal`) is drawn."""
+    import numpy as np
+
+    view.resize(900, 600)
+    view.grab()  # paint, so the view knows what is where
+    screen, owners, faces, _ = view._frame
+    for k in range(len(owners) - 1, -1, -1):  # nearest first
+        item = view.items[owners[k]]
+        if (item.row, item.copy) != (row, copy):
+            continue
+        if normal is not None and np.dot(item.file_normals[faces[k]], normal) < 0.99:
+            continue
+        a, b, c = screen[k]
+        centre = (a + b + c) / 3
+        if view._hit(QPointF(*centre)) is not None and view._hit(QPointF(*centre))[0] is item:
+            return tuple(centre)
+    raise AssertionError("part not on screen")
+
+
+def test_parts_are_packed_onto_the_plate(window, models):
+    wait(window.add_models(list(models), [1, 2]))
+    settle(window)
+    rows = window.parts.rows()
+    assert [len(info.spots) for info, _ in rows] == [1, 2]
+    assert len(window.model_view.items) == 3 and window.plate_problems == []
+    assert window.layer_info.text().startswith("3 parts on the plate")
+    assert not window.model_view.grab().isNull()
+    window.model_view.top_view()
+    assert not window.model_view.grab().isNull()
+    window.parts.table.cellWidget(1, 2).setValue(1)  # fewer copies: the plate follows
+    settle(window)
+    assert len(window.model_view.items) == 2
+
+
+def test_drag_a_part_then_undo(window, models):
+    from PySide6.QtCore import QEvent
+
+    wait(window.add_models(list(models)))
+    settle(window)
+    view = window.model_view
+    before = window.parts.info(0).spots[0]
+    start = screen_point(view, 0)
+    mouse(view, QEvent.MouseButtonPress, start)
+    assert window.parts.selected_row() == 0
+    mouse(view, QEvent.MouseMove, (start[0] + 60, start[1]))
+    mouse(view, QEvent.MouseButtonRelease, (start[0] + 60, start[1]))
+    settle(window)
+    after = window.parts.info(0).spots[0]
+    assert after != before and window.hand_placed and window.isWindowModified()
+    assert window.act_undo.text() == "&Undo Move Part"
+    window.undo()
+    settle(window)
+    assert window.parts.info(0).spots[0] == before and not window.hand_placed
+    window.redo()
+    settle(window)
+    assert window.parts.info(0).spots[0] == after and window.hand_placed
+
+
+def test_hand_placed_parts_stay_put_until_arranged(window, models):
+    wait(window.add_models(list(models)))
+    settle(window)
+    window._part_moved(0, 0, (40.0, 40.0, 0.0, 0))
+    window._move_done()
+    settle(window)
+    window.parts.table.cellWidget(1, 2).setValue(2)  # a new copy goes around the parts in place
+    settle(window)
+    assert window.parts.info(0).spots == [(40.0, 40.0, 0.0, 0)] and len(window.parts.info(1).spots) == 2
+    assert window.plate_problems == []
+    wait(window.arrange())
+    settle(window)
+    assert not window.hand_placed and window.parts.info(0).spots != [(40.0, 40.0, 0.0, 0)]
+
+
+def test_parts_too_close_are_flagged(window, models):
+    wait(window.add_models(list(models)))
+    settle(window)
+    window._part_moved(1, 0, window.parts.info(0).spots[0])  # right on top of the cube
+    window._move_done()
+    settle(window)
+    assert window.plate_problems and window.model_view.problems == {(0, 0), (1, 0)}
+    assert "⚠" in window.layer_info.text()
+    window.settings.spins["layer_thickness"].setValue(1)
+    wait(window.start_slicing())
+    assert "warning: cube.stl and ring.stl are" in window.report.toPlainText()
+
+
+def test_slice_uses_the_plate(window, models):
+    wait(window.add_models(list(models)))
+    settle(window)
+    window._part_moved(0, 0, (30.0, -20.0, 0.0, 0))
+    window._move_done()
+    settle(window)
+    window.settings.spins["layer_thickness"].setValue(1)
+    wait(window.start_slicing())
+    assert window.result.build.placements[0].spot == pytest.approx((30, -20, 0, 0))
+
+
+def test_lay_flat_on_a_clicked_face(window, tall_model):
+    from PySide6.QtCore import QEvent
+
+    wait(window.add_models([tall_model]))
+    settle(window)
+    window.orientation.pick_button.setChecked(True)
+    view = window.model_view
+    assert view.picking and window.views.currentWidget() is view
+    point = screen_point(view, 0, normal=(1, 0, 0))  # the 20 x 60 side
+    mouse(view, QEvent.MouseButtonPress, point)
+    mouse(view, QEvent.MouseButtonRelease, point)
+    assert window.parts.table.item(0, 3).text() == "60.0 × 20.0 × 10.0"  # lying on that side
+    assert not window.orientation.pick_button.isChecked() and not view.picking
+    assert window.act_undo.text() == "&Undo Orientation"
+
+
+def test_projects_keep_hand_placed_parts_only(window, models, tmp_path, monkeypatch):
+    import json
+
+    wait(window.add_models(list(models)))
+    settle(window)
+    path = str(tmp_path / "plate.xeroform")
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path, ""))
+    assert window.save_project()
+    assert all("spots" not in p for p in json.loads(open(path, encoding="utf-8").read())["parts"])
+    window._part_moved(0, 0, (40.0, 40.0, 0.0, 0))
+    window._move_done()
+    assert window.save_project()
+    window.new_project()
+    wait(window.open_project(path))
+    settle(window)
+    assert window.hand_placed and window.parts.info(0).spots == [(40.0, 40.0, 0.0, 0)]
+    assert not window.isWindowModified() and window.act_undo.text() == "&Undo"
+
+
+# --- part settings, undo, updates -------------------------------------------------
+
+
+def test_part_settings(window, models, tmp_path, monkeypatch):
+    wait(window.add_models(list(models)))
+    window.parts.select_row(1)
+    card = window.part_settings
+    assert card.part is window.parts.info(1) and not card.spins["hatch_power"].isEnabled()
+    card.own.setChecked(True)
+    card.spins["hatch_power"].setValue(9)
+    assert window.parts.info(1).settings["hatch_power"] == 9
+    assert not window.parts.table.item(1, 1).icon().isNull()  # marked in the list
+    assert "Own settings: fill 9 W" in window.parts.table.item(1, 1).toolTip()
+    assert window.act_undo.text() == "&Undo Part Settings"
+    window.settings.spins["layer_thickness"].setValue(1)
+    wait(window.start_slicing())
+    assert "own settings: fill 9 W" in window.report.toPlainText()
+    powers = {h.params.power for layer in window.result.layers for h in layer.hatches}
+    assert powers == {5.0, 9.0}
+
+    path = str(tmp_path / "own.xeroform")
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *a: (path, ""))
+    assert window.save_project()
+    window.new_project()
+    wait(window.open_project(path))
+    assert window.parts.info(1).settings["hatch_power"] == 9 and not window.parts.info(0).settings
+    window.parts.select_row(1)
+    card.own.setChecked(False)
+    assert window.parts.info(1).settings == {} and window.parts.table.item(1, 1).icon().isNull()
+
+
+def test_undo_and_redo(window, models):
+    assert not window.act_undo.isEnabled() and not window.undo_button.isEnabled()
+    window.settings.spins["hatch_power"].setValue(8)
+    assert window.act_undo.text() == "&Undo Fill power"
+    wait(window.add_models([models[0]]))
+    settle(window)
+    window.parts.table.cellWidget(0, 2).setValue(3)
+    settle(window)
+    assert window.act_undo.text() == "&Undo Copies"
+    window.undo()
+    settle(window)
+    assert window.parts.table.cellWidget(0, 2).value() == 1 and len(window.model_view.items) == 1
+    window.undo()
+    assert window.parts.table.rowCount() == 0
+    window.undo()
+    assert window.settings.spins["hatch_power"].value() == 5 and not window.act_undo.isEnabled()
+    window.redo()
+    window.redo()
+    window.redo()
+    settle(window)
+    assert window.settings.spins["hatch_power"].value() == 8 and window.parts.table.cellWidget(0, 2).value() == 3
+    assert not window.act_redo.isEnabled()
+
+
+def test_quick_edits_are_one_undo_step(window):
+    for v in (6, 7, 8, 9):
+        window.settings.spins["hatch_power"].setValue(v)
+    window.undo()
+    assert window.settings.spins["hatch_power"].value() == 5
+
+
+def test_update_notice(window, monkeypatch):
+    from xeroform.gui.updates import install_command, is_newer, version_in
+
+    assert version_in("https://github.com/o/r/releases/tag/v0.4.0") == "0.4.0"
+    assert version_in("https://github.com/o/r/releases") is None
+    assert is_newer("0.10.0", "0.9.9") and not is_newer("0.3.0", "0.3.0")
+    assert install_command("win32").startswith("irm ") and "install-mac.sh" in install_command("darwin")
+
+    assert window.update_button.isHidden()
+    window.updates.handle("https://github.com/oumarknt31/xeroform-slicer/releases/tag/v99.0.0")
+    assert not window.update_button.isHidden() and window.update_button.text() == "Update to 99.0.0"
+    shown = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: shown.append(self.informativeText()))
+    window.show_update()
+    assert install_command() in shown[0]
+
+    told = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: told.append(a[2]))
+    window._update_by_hand = True
+    window.updates.handle("https://github.com/oumarknt31/xeroform-slicer/releases/tag/v0.0.1")
+    assert told and "latest" in told[0]
+
+
+def test_automatic_update_checks_respect_the_setting(window, monkeypatch):
+    asked = []
+    monkeypatch.setattr(window.updates, "check", lambda: asked.append(True))
+    window.act_auto_updates.setChecked(False)
+    window.check_for_updates()
+    assert not asked
+    window.act_auto_updates.setChecked(True)
+    window.store.remove("update_checked")
+    window.check_for_updates()
+    window.check_for_updates()  # once a day at most
+    assert len(asked) == 1
+    window.check_for_updates(by_hand=True)
+    assert len(asked) == 2
+
+
+def test_parts_that_dont_fit_are_named_and_the_rest_shown(window, tmp_path):
+    big = tmp_path / "big.stl"
+    trimesh.creation.box(extents=[60, 60, 60]).export(str(big))
+    wait(window.add_models([str(big)], [12]))  # 4 fit on the 150 mm plate (2 x 2), with room for 4 above
+    settle(window)
+    shown = len(window.model_view.items)
+    assert 0 < shown < 12
+    assert f"{12 - shown} don't fit" in window.layer_info.text()
+    assert "Left over: big.stl" in window.report.toPlainText()

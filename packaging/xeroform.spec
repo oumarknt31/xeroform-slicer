@@ -25,7 +25,7 @@ datas = (
     + collect_data_files("trimesh")
 )
 excludes = ["matplotlib", "tkinter", "IPython", "pandas", "pytest", "vtk", "PySide6.QtQml", "PySide6.QtQuick",
-            "PySide6.QtNetwork", "PySide6.QtPdf"]
+            "PySide6.QtPdf"]  # QtNetwork stays: the update check uses it
 
 a = Analysis(
     [os.path.join(SPECPATH, "xeroform_gui.py")],

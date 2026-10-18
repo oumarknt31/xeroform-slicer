@@ -1,24 +1,23 @@
-"""The views: one layer from above, the whole build from above, and the layer stack in 3D.
+"""The slice views: one layer from above, and the layer stack in 3D.
 
-LayerView and LayoutView share PlateView: model coordinates in mm with +y up,
-scroll to zoom, drag to pan, double-click to fit, a mm grid that adapts to the
-zoom, and the cursor position shown in mm. LayerView can also play back the
-laser tracing the layer. StackView draws the sliced contours stacked in 3D; drag
-to orbit. All colours come from the theme.
+LayerView builds on PlateView: model coordinates in mm with +y up, scroll to
+zoom, drag to pan, double-click to fit, a mm grid that adapts to the zoom, and
+the cursor position shown in mm. It can also play back the laser tracing the
+layer. StackView draws the sliced contours stacked in 3D; drag to orbit. All
+colours come from the theme. (The parts before slicing: model_view.py.)
 """
 
 from __future__ import annotations
 import math
 
 import numpy as np
-from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient, QTransform
-from PySide6.QtWidgets import QToolTip, QWidget
+from PySide6.QtWidgets import QWidget
 
 from ..layers import Layer
 from . import theme
 
-LEVELS = ("#2563eb", "#ea580c", "#059669", "#7c3aed", "#d97706", "#db2777")
 MARGIN = 28  # px around the fitted view
 GRID_STEPS = (0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000)
 MIN_GRID_PX = 36  # grid lines at least this far apart on screen
@@ -350,74 +349,6 @@ class LayerView(PlateView):
             p.drawEllipse(s, 18, 18)
             p.setBrush(QColor("#fffbeb"))
             p.drawEllipse(s, 2.5, 2.5)
-
-
-class LayoutView(PlateView):
-    """The build seen from above: every part's footprint, coloured by stacking level."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.items: list[tuple[QRectF, str, str, int]] = []  # rect mm, name, detail, level
-
-    def set_items(self, items: list[tuple[QRectF, str, str, int]], plate: tuple[float, float] | None = None) -> None:
-        # draw lower levels first so stacked parts sit on top
-        self.items, self.plate = sorted(items, key=lambda it: it[3]), plate
-        self.refresh_bounds()
-
-    def item_at(self, pos: QPointF):
-        """The topmost part under a widget position, or None."""
-        w = self.to_world(pos)
-        hits = [it for it in self.items if it[0].contains(w)]
-        return hits[-1] if hits else None
-
-    def event(self, e):
-        if e.type() == QEvent.ToolTip:
-            item = self.item_at(QPointF(e.pos()))
-            if item:
-                rect, name, detail, _ = item
-                QToolTip.showText(
-                    e.globalPos(),
-                    f"{name}\n{detail}\n{rect.width():.1f} × {rect.height():.1f} mm "
-                    f"at x {rect.left():.1f}, y {rect.top():.1f}",
-                    self,
-                )
-            else:
-                QToolTip.hideText()
-            return True
-        return super().event(e)
-
-    def content_bounds(self) -> QRectF | None:
-        if not self.items:
-            return None
-        r = QRectF(self.items[0][0])
-        for rect, *_ in self.items[1:]:
-            r = r.united(rect)
-        return r.adjusted(-5, -5, 5, 5)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        self.paint_background(p)
-        for rect, _, _, level in self.items:
-            color = LEVELS[level % len(LEVELS)]
-            p.setPen(_pen(color, 1.6))
-            p.setBrush(_alpha(color, 46))
-            p.drawRoundedRect(rect, 1.2, 1.2)
-        p.setBrush(Qt.NoBrush)
-        # labels in screen space so they stay readable at any zoom
-        tr = self.transform()
-        p.resetTransform()
-        fm = QFontMetrics(self.font())
-        for rect, name, detail, _ in self.items:
-            box = tr.mapRect(rect).adjusted(6, 5, -6, -5)
-            if box.width() < 30 or box.height() < fm.height():
-                continue
-            lines = [name, detail] if box.height() >= 2 * fm.height() else [name]
-            for k, text in enumerate(lines):
-                p.setPen(theme.color("text" if k == 0 else "muted"))
-                text = fm.elidedText(text, Qt.ElideRight, int(box.width()))
-                p.drawText(QPointF(box.left(), box.top() + fm.ascent() + k * fm.height()), text)
-        self.paint_overlays(p)
 
 
 class StackView(QWidget):

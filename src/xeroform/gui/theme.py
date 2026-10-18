@@ -303,6 +303,7 @@ QLabel#tileLabel {{ color: {muted}; font-size: 11px; font-weight: 700; }}
 QFrame#toast {{ background: {toast_bg}; border: 1px solid {border_hi}; border-radius: 12px; }}
 QFrame#toast QLabel {{ color: {toast_text}; background: transparent; }}
 QLabel#emptyTitle {{ font-size: 18px; font-weight: 700; }}
+QToolButton#updatePill {{ color: {accent}; border: 1px solid {accent}; border-radius: 13px; padding: 3px 10px; }}
 
 QMenuBar {{ background: {header}; }}
 QMenuBar::item:selected {{ background: {surface2}; }}
@@ -352,6 +353,14 @@ _ICONS = {
     "lay-flat": '<rect x="5" y="9" width="14" height="7" rx="1.5"/><path d="M3 20h18"/><path d="M12 3v3M10 5l2 2 2-2"/>',
     "height": '<path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/><path d="M4 4h4M4 20h4"/>',
     "logo": '<rect fill="C" stroke="none" x="2" y="2" width="20" height="20" rx="5"/>',
+    "undo": '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+    "redo": '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+    "arrange": '<rect x="3" y="3" width="8" height="10" rx="1.5"/><rect x="14" y="3" width="7" height="6" rx="1.5"/>'
+    '<rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="8" height="5" rx="1.5"/>',
+    "pick-face": '<path d="M3 17l6-11 12 4-6 11z"/><path fill="C" stroke="none" d="M9 6l12 4-6 11z" opacity=".35"/>',
+    "top-view": '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8"/>',
+    "perspective": '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    "update": '<circle cx="12" cy="12" r="9"/><path d="M12 7v8M8.5 11.5L12 15l3.5-3.5"/>',
 }
 
 _icon_cache: dict[tuple[str, str], QIcon] = {}

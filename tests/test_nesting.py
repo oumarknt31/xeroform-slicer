@@ -13,11 +13,11 @@ from xeroform.nesting import (
     NestingError,
     _turned,
     arrange,
-    conflicts,
     pack_boxes,
     pack_shapes,
     placement_at,
     plan,
+    problems,
 )
 from xeroform.part import MeshError
 from xeroform.pipeline import slice_build
@@ -248,7 +248,7 @@ def test_pinned_parts_stay_and_the_rest_pack_around_them():
     meshes, volume = [cube, pin, pin, pin], (130, 130, 100)
     placements = plan(meshes, volume, spacing=3, spots={0: (10, -20, 0, 90)})
     assert placements[0].spot == pytest.approx((10, -20, 0, 90))
-    assert conflicts(meshes, placements, volume, 3) == []
+    assert problems(meshes, placements, volume, 3) == []
     # packed against the pinned cube, not off in a corner
     for p in placements[1:]:
         assert np.hypot(p.spot[0] - 10, p.spot[1] + 20) < 25
@@ -256,13 +256,13 @@ def test_pinned_parts_stay_and_the_rest_pack_around_them():
     assert merged.bounds[0] == pytest.approx(np.min([p.position for p in placements], axis=0))
 
 
-def test_conflicts():
+def test_problems():
     cube, pin = trimesh.creation.box(extents=[20, 20, 20]), trimesh.creation.box(extents=[4, 4, 4])
     meshes, volume, names = [cube, pin], (130, 130, 100), ["cube", "pin"]
 
     def check(*spots):
         placements = [placement_at(m, i, spot) for i, (m, spot) in enumerate(zip(meshes, spots))]
-        return conflicts(meshes, placements, volume, 3, names)
+        return [p.message for p in problems(meshes, placements, volume, 3, names)]
 
     assert check((0, 0, 0, 0), (40, 0, 0, 0)) == []
     assert check((0, 0, 0, 0), (0, 0, 8, 0)) == ["cube and pin are inside each other."]
@@ -270,6 +270,8 @@ def test_conflicts():
     assert check((0, 0, 0, 0), (0, 0, 21, 0)) == ["cube and pin are 1.0 mm apart (spacing 3 mm)."]
     assert check((-60, 0, 0, 0), (40, 0, 0, 0)) == ["cube is closer than 3 mm to the chamber wall."]
     assert check((0, 0, 0, 0), (40, 0, 97, 0)) == ["pin sticks out of the build volume (97.0 to 101.0 mm high)."]
+    placements = [placement_at(m, i, (0, 0, 0, 0)) for i, m in enumerate(meshes)]
+    assert [p.parts for p in problems(meshes, placements, volume, 3)] == [(0, 1)]
 
 
 # --- pipeline / CLI ---------------------------------------------------------
