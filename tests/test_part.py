@@ -217,3 +217,68 @@ def test_files_referenced_inside_a_model_are_never_opened(tmp_path, monkeypatch)
     )
     part = Part(str(obj))
     assert part.report.triangles == 4 and opened == []
+
+
+def _layer_shapes(mesh, tmp_path, z):
+    """(area, is_hole) of every outline of `mesh` sliced at z."""
+    from xeroform.layers import signed_area
+
+    path = tmp_path / "shells.stl"
+    mesh.export(str(path))
+    result = slice_job(str(path), None, SliceConfig(layer_thickness=1, num_inner_contours=0))
+    layer = min(result.layers, key=lambda layer: abs(layer.z - z))
+    return sorted((round(abs(signed_area(c.points))), c.is_hole) for c in layer.contours)
+
+
+def _block(lo, hi, inside_out=False):
+    box = trimesh.creation.box(bounds=[lo, hi])
+    if inside_out:
+        box.invert()
+    return box
+
+
+def test_shells_that_touch_are_sliced_as_one(tmp_path):
+    """Two boxes side by side make an L: one outline, not a tangle."""
+    bracket = trimesh.util.concatenate([_block([0, 0, 0], [40, 12, 10]), _block([0, 12, 0], [12, 40, 10])])
+    ((area, hole),) = _layer_shapes(bracket, tmp_path, 5)
+    assert area == pytest.approx(40 * 12 + 12 * 28, rel=0.03) and not hole
+
+
+def test_overlapping_shells_are_joined(tmp_path):
+    cross = trimesh.util.concatenate([_block([0, 10, 0], [30, 20, 10]), _block([10, 0, 0], [20, 30, 10])])
+    ((area, hole),) = _layer_shapes(cross, tmp_path, 5)
+    assert area == pytest.approx(500, rel=0.03) and not hole  # the middle counted once, not cut out
+    walls = trimesh.creation.annulus(r_min=16, r_max=18, height=25)
+    walls.apply_translation([0, 0, 12.5])
+    base = trimesh.creation.cylinder(radius=16, height=2)
+    base.apply_translation([0, 0, 1])
+    cup = trimesh.util.concatenate([walls, base])  # the base's side lies on the walls' inside
+    assert _layer_shapes(cup, tmp_path, 1) == [(pytest.approx(np.pi * 18**2, rel=0.03), False)]
+    (hole_area, hole), (rim_area, outer) = _layer_shapes(cup, tmp_path, 10)
+    assert hole and not outer and hole_area == pytest.approx(np.pi * 16**2, rel=0.03)
+
+
+def test_a_cavity_stays_hollow_and_what_is_inside_it_stays(tmp_path):
+    hollow = trimesh.util.concatenate(
+        [_block([0, 0, 0], [30, 30, 30]), _block([5, 5, 5], [25, 25, 25], inside_out=True)]
+    )
+    (cavity, hole), (wall, outer) = _layer_shapes(hollow, tmp_path, 15)
+    assert hole and cavity == pytest.approx(400, rel=0.03) and not outer and wall == pytest.approx(900, rel=0.03)
+    ball = trimesh.creation.icosphere(subdivisions=3, radius=5)
+    ball.apply_translation([15, 15, 15])
+    nested = trimesh.util.concatenate([hollow, ball])
+    shapes = _layer_shapes(nested, tmp_path, 15)
+    assert len(shapes) == 3 and [hole for _, hole in shapes].count(True) == 1  # wall, cavity, ball
+
+
+def test_outline_that_cant_be_worked_out_is_a_clear_error(tmp_path, monkeypatch):
+    import pyslm
+
+    def broken(self, z, **kw):
+        raise ValueError("unable to recover polygon!")
+
+    monkeypatch.setattr(pyslm.Part, "getVectorSlice", broken)
+    path = tmp_path / "cube.stl"
+    trimesh.creation.box(extents=[10, 10, 10]).export(str(path))
+    with pytest.raises(MeshError, match="outline at z = 1.000 mm can't be worked out"):
+        slice_job(str(path), None, SliceConfig(layer_thickness=1))

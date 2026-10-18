@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 import numpy as np
 import pyslm
 import trimesh
+from pyslm.hatching.utils import poly2Paths
+from shapely.geometry import Polygon
+from shapely.ops import polygonize, unary_union
 
 from .orient import NO_ROTATION, Angles, rotate_mesh
 
@@ -86,30 +89,130 @@ class Part:
     ):
         mesh, self.report = prepare_mesh(mesh_path, scale, rotation)
         check_fits(mesh, build_volume)
-        self._part = pyslm.Part(name)
-        self._part.setGeometryByMesh(mesh)
+        self._set_geometry(mesh, name)
 
     @classmethod
     def from_mesh(cls, mesh: trimesh.Trimesh, name: str = "build") -> "Part":
         """Wrap a mesh that is already checked and placed (e.g. a packed build)."""
         part = cls.__new__(cls)
         part.report = describe(mesh)
-        part._part = pyslm.Part(name)
-        part._part.setGeometryByMesh(mesh)
+        part._set_geometry(mesh, name)
         return part
+
+    def _set_geometry(self, mesh: trimesh.Trimesh, name: str) -> None:
+        """Shells that touch or overlap another (two boxes making an L, a part and
+        the cavity inside it) are cut one by one and combined, see _combined_slice;
+        cutting them together leaves outlines that don't join up. All the other
+        shells are cut in one go."""
+        self._bounds = [float(v) for v in mesh.bounds.reshape(-1)]
+        self._groups: list[list[tuple[pyslm.Part, float]]] = []
+        shells = _shells(mesh)
+        groups = [g for g in _touching(*_shell_bounds(mesh, shells)) if len(g) > 1] if shells.max(initial=0) else []
+        if not groups:
+            self._part = _pyslm_part(mesh, name)
+            return
+        apart = np.ones(len(mesh.faces), dtype=bool)
+        for g in groups:
+            bodies = []
+            for i in g:
+                faces = np.flatnonzero(shells == i)
+                apart[faces] = False
+                body = mesh.submesh([faces], append=True)
+                with np.errstate(all="ignore"):  # a stray open fragment has no volume
+                    bodies.append((_pyslm_part(body, name), float(np.sign(body.volume))))
+            self._groups.append(bodies)
+        self._part = _pyslm_part(mesh.submesh([np.flatnonzero(apart)], append=True), name) if apart.any() else None
 
     @property
     def bounding_box(self):
         """[min_x, min_y, min_z, max_x, max_y, max_z] in mm."""
-        return self._part.boundingBox
+        return self._bounds
 
     @property
     def z_max(self) -> float:
-        return float(self._part.boundingBox[5])
+        return self._bounds[5]
 
     def raw_slice(self, z: float):
-        """Return the layer's outline polygons at height z (PySLM objects)."""
-        return self._part.getVectorSlice(z)
+        """Return the layer's outline polygons at height z (as PySLM takes them)."""
+        try:
+            paths = self._part.getVectorSlice(z) if self._part is not None else []
+            for group in self._groups:
+                paths += _combined_slice(group, z)
+            return paths
+        except ValueError as e:  # the cut through the surface doesn't join up into outlines
+            raise MeshError(
+                f"The model's outline at z = {z:.3f} mm can't be worked out ({e}). Its surface probably "
+                "crosses itself there. Repair it in a mesh tool and try again."
+            ) from e
+
+
+def _pyslm_part(mesh: trimesh.Trimesh, name: str) -> pyslm.Part:
+    part = pyslm.Part(name)
+    part.setGeometryByMesh(mesh)
+    return part
+
+
+def _shells(mesh: trimesh.Trimesh) -> np.ndarray:
+    """The shell each face belongs to (0, 1, ...). Faces are in one shell when they share
+    an edge used by just the two of them, so shells that only touch stay apart."""
+    if not len(mesh.faces):
+        return np.zeros(0, dtype=int)
+    return trimesh.graph.connected_component_labels(mesh.face_adjacency, node_count=len(mesh.faces))
+
+
+def _shell_bounds(mesh: trimesh.Trimesh, shells: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    order = np.argsort(shells, kind="stable")
+    starts = np.flatnonzero(np.diff(shells[order], prepend=-1))
+    tri = mesh.triangles[order]
+    return np.minimum.reduceat(tri.min(axis=1), starts), np.maximum.reduceat(tri.max(axis=1), starts)
+
+
+def _touching(lo: np.ndarray, hi: np.ndarray) -> list[list[int]]:
+    """Group the shells whose bounding boxes (lo, hi) touch or overlap, directly or via others."""
+    lo, hi = lo - 1e-6, hi + 1e-6
+    count = len(lo)
+    group = list(range(count))
+
+    def root(i):
+        while group[i] != i:
+            group[i] = group[group[i]]
+            i = group[i]
+        return i
+
+    for i in range(count):
+        near = np.flatnonzero(np.all((lo[i + 1 :] <= hi[i]) & (hi[i + 1 :] >= lo[i]), axis=1)) + i + 1
+        for j in near:
+            group[root(int(j))] = root(i)
+    out: dict[int, list[int]] = {}
+    for i in range(count):
+        out.setdefault(root(i), []).append(i)
+    return list(out.values())
+
+
+def _combined_slice(group: list[tuple[pyslm.Part, float]], z: float) -> list[np.ndarray]:
+    """The outlines at z of shells that touch or overlap: solid wherever more
+    shells enclose a point than inside-out ones (cavities) do."""
+    shapes = []
+    for shell, sign in group:
+        polygons = shell.getVectorSlice(z, returnCoordPaths=False, fixPolygons=False)
+        if polygons:
+            shapes.append((sign, unary_union(polygons)))
+    if not shapes:
+        return []
+    if all(sign > 0 for sign, _ in shapes):
+        solid = unary_union([shape for _, shape in shapes])
+    else:
+        pieces = polygonize(unary_union([shape.boundary for _, shape in shapes]))
+        solid = unary_union(
+            [
+                piece
+                for piece in pieces
+                if sum(sign for sign, shape in shapes if shape.contains(piece.representative_point())) > 0
+            ]
+        )
+    solid = solid.buffer(pyslm.Part.POLYGON_FIX_EPSILON)
+    polygons = [solid] if isinstance(solid, Polygon) else list(getattr(solid, "geoms", []))
+    return [path for polygon in polygons if not polygon.is_empty for path in poly2Paths(polygon)]
 
 
 def prepare_mesh(path: str, scale: float = 1.0, rotation: Angles = NO_ROTATION) -> tuple[trimesh.Trimesh, MeshReport]:
