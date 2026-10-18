@@ -24,7 +24,7 @@ class SliceConfig:
     scale: float = 1.0  # e.g. 25.4 for a model drawn in inches
     build_volume: tuple[float, float, float] | None = None  # (x, y, z) mm; None = don't check
     part_spacing: float = 3.0  # mm between packed parts, and from the walls
-    allow_rotation: bool = True  # let the packer turn parts 90 deg about Z
+    allow_rotation: bool = True  # let the packer turn parts about Z (in 90 deg steps)
 
     # laser - placeholders until the laser is chosen and tuned on hardware
     contour_power: float = 4.0  # W

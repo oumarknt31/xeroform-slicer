@@ -5,10 +5,11 @@ import itertools
 import numpy as np
 import pytest
 import trimesh
+from scipy.spatial import cKDTree
 
 from xeroform import SliceConfig
 from xeroform.__main__ import main
-from xeroform.nesting import NestingError, arrange, pack_boxes
+from xeroform.nesting import NestingError, _turned, arrange, pack_boxes, pack_shapes
 from xeroform.part import MeshError
 from xeroform.pipeline import slice_build
 
@@ -101,6 +102,123 @@ def test_arrange_merges_placed_meshes():
     assert merged.volume == pytest.approx(2 * 8000 + 3000)
     assert (merged.bounds[0][:2] >= -50 + 3 - 1e-6).all() and (merged.bounds[1][:2] <= 50 - 3 + 1e-6).all()
     assert merged.bounds[0][2] == pytest.approx(0)
+
+
+# --- packing by shape ---------------------------------------------------------
+
+
+def _bracket(arm=40, width=12, height=10):
+    """An L-shaped bracket, lying flat."""
+    a = trimesh.creation.box(bounds=[[0, 0, 0], [arm, width, height]])
+    b = trimesh.creation.box(bounds=[[0, width, 0], [width, arm, height]])
+    return trimesh.util.concatenate([a, b])
+
+
+def _cup(radius=18, wall=2, height=25):
+    walls = trimesh.creation.annulus(r_min=radius - wall, r_max=radius, height=height)
+    walls.apply_translation([0, 0, height / 2])
+    base = trimesh.creation.cylinder(radius=radius - wall, height=wall)
+    base.apply_translation([0, 0, wall / 2])
+    return trimesh.util.concatenate([walls, base])
+
+
+def _placed(meshes, placements):
+    return [_turned(meshes[p.item], p.turn).apply_translation(p.position) for p in placements]
+
+
+def _surface(mesh, n=6000):
+    """Points on the surface. Distances measured between them are never less
+    than the true ones."""
+    points, _ = trimesh.sample.sample_surface(mesh, n, seed=0)
+    return np.vstack([points, mesh.vertices])
+
+
+def _near_pairs(parts, gap, axes=slice(0, 3)):
+    """Pairs of parts whose boxes come closer than `gap` (along `axes`)."""
+    for a, b in itertools.combinations(range(len(parts)), 2):
+        lo, hi = parts[a].bounds, parts[b].bounds
+        apart = np.maximum(lo[0] - hi[1], hi[0] - lo[1])[axes]
+        if (apart < gap).all():
+            yield a, b
+
+
+def _assert_apart(parts, spacing, volume):
+    X, Y, Z = volume
+    for m in parts:
+        assert (m.bounds[0][:2] >= np.array([-X / 2, -Y / 2]) + spacing - 1e-6).all()
+        assert (m.bounds[1][:2] <= np.array([X / 2, Y / 2]) - spacing + 1e-6).all()
+        assert m.bounds[0][2] >= -1e-9 and m.bounds[1][2] <= Z + 1e-6
+    clouds = {}
+    for a, b in _near_pairs(parts, spacing):
+        for i in (a, b):
+            clouds.setdefault(i, _surface(parts[i]))
+        gap, _ = cKDTree(clouds[a]).query(clouds[b])
+        assert gap.min() >= spacing - 0.05, (a, b, gap.min())
+
+
+def _assert_liftable(parts):
+    """No two parts each have material above the other: lifting them straight
+    out, top one first, never hits anything."""
+    clouds = {}
+
+    def above(a, b):  # some point of a directly above some point of b
+        tree = cKDTree(clouds[b][:, :2])
+        for i, near in enumerate(tree.query_ball_point(clouds[a][:, :2], 0.3)):
+            if near and clouds[a][i, 2] > clouds[b][near, 2].min() + 1e-6:
+                return True
+        return False
+
+    for a, b in _near_pairs(parts, 0.3, axes=slice(0, 2)):
+        for i in (a, b):
+            clouds.setdefault(i, _surface(parts[i], 3000))
+        assert not (above(a, b) and above(b, a)), (a, b)
+
+
+def test_shapes_keep_spacing_and_walls():
+    meshes = [_bracket()] * 10 + [trimesh.creation.annulus(r_min=6, r_max=10, height=6)] * 6
+    volume = (120, 120, 60)
+    placements = pack_shapes(meshes, volume, spacing=3)
+    assert {p.turn for p in placements} <= {0, 90, 180, 270}
+    parts = _placed(meshes, placements)
+    _assert_apart(parts, 3, volume)
+    _assert_liftable(parts)
+
+
+def test_part_drops_into_a_ring():
+    ring = trimesh.creation.annulus(r_min=14, r_max=20, height=8)
+    pin = trimesh.creation.box(extents=[10, 10, 8])
+    volume = (46, 46, 10)  # room for the ring only - the pin has to go in the middle
+    with pytest.raises(NestingError):
+        pack_boxes([ring.extents, pin.extents], volume, spacing=3)
+    merged, placements = arrange([ring, pin], volume, spacing=3)
+    ring_at, pin_at = placements
+    centre = np.add(ring_at.position[:2], 20)
+    corners = np.add(pin_at.position[:2], [[0, 0], [10, 0], [0, 10], [10, 10]])
+    assert (np.linalg.norm(corners - centre, axis=1) <= 14 - 3 + 1e-6).all()  # in the hole
+    assert pin_at.position[2] == 0
+    _assert_apart(_placed([ring, pin], placements), 3, volume)
+
+
+def test_nothing_trapped_under_an_upturned_cup():
+    cup = _cup()
+    cup.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0]))  # opening down
+    cube = trimesh.creation.box(extents=[8, 8, 8])
+    meshes = [cup] + [cube] * 3
+    placements = pack_shapes(meshes, (44, 44, 80), spacing=3)
+    top = placements[0].position[2] + placements[0].size[2]
+    assert all(p.position[2] >= top + 3 - 1e-6 for p in placements[1:])  # on top, not inside
+    _assert_liftable(_placed(meshes, placements))
+
+
+def test_shapes_pack_lower_than_boxes():
+    for meshes in ([_bracket()] * 40, [_cup()] * 20 + [trimesh.creation.box(extents=[12, 12, 12])] * 30):
+        volume = (150, 150, 150)
+        boxes = pack_boxes([m.extents for m in meshes], volume, spacing=3)
+        merged, placements = arrange(meshes, volume, spacing=3)
+        box_height = max(p.position[2] + p.size[2] for p in boxes)
+        assert merged.bounds[1][2] < 0.9 * box_height
+        assert merged.volume == pytest.approx(sum(m.volume for m in meshes), rel=1e-6)
+        _assert_apart(_placed(meshes, placements), 3, volume)
 
 
 # --- pipeline / CLI ---------------------------------------------------------

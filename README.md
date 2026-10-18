@@ -128,14 +128,17 @@ sit side by side and stacked. The packer:
 
 - keeps the build as low as possible, because every layer costs a powder
   recoat;
+- packs by the parts' real shapes, so a small part can sit inside a ring, in a
+  cup or in the corner of a bracket. Every part can still be lifted straight
+  out, top one first, so nothing gets trapped. When plain boxes pack lower
+  (rectangular parts), it uses those instead;
 - keeps `--part-spacing` (3 mm by default) between parts and from the walls;
-- may turn parts 90° about Z to fit (`--no-rotate` turns this off), but never
-  tips them over;
+- may turn parts about Z to fit (`--no-rotate` turns this off), but never tips
+  them over;
 - centres the packed block on the plate, where the powder bed is most even.
 
-It packs bounding boxes, so irregular shapes leave unused space. The run prints
-the build height and packing density (part volume / plate area × height), and
-names the parts that don't fit.
+The run prints the build height and packing density (part volume / plate area ×
+height), and names the parts that don't fit.
 
 ### Scan order
 

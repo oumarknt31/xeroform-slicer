@@ -72,7 +72,7 @@ def main(argv=None) -> int:
         metavar="MM",
         help="gap between parts and to the walls in mm",
     )
-    nest.add_argument("--no-rotate", action="store_true", help="don't turn parts 90 deg to fit more")
+    nest.add_argument("--no-rotate", action="store_true", help="don't turn parts about Z to fit more")
     laser = ap.add_argument_group("laser (placeholder defaults - tune on hardware)")
     defaults = SliceConfig()
     laser.add_argument("--hatch-power", type=float, default=defaults.hatch_power, help="fill power in W")

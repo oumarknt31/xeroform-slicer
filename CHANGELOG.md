@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Packing goes by the parts' real shapes, not their bounding boxes: parts sit
+  inside rings and cups and in the corners of brackets. Builds of irregular
+  parts come out up to a third lower.
 ## 0.3.0 (2026-10-18)
 
 - Orient parts in the app: X/Y/Z angles, ±90° turns, *Lay flat* (rests the

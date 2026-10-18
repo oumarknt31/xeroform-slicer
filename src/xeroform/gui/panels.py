@@ -365,7 +365,7 @@ class SettingsPanel(QWidget):
                 self.scan_order.currentTextChanged.connect(self.changed)
                 form.addRow("Scan order", self.scan_order)
             if title == "Placement":
-                self.allow_rotation = QCheckBox("Turn parts 90° to fit more")
+                self.allow_rotation = QCheckBox("Turn parts to fit more")
                 self.allow_rotation.setToolTip("Let the packer turn parts about Z. Parts are never tipped over.")
                 self.allow_rotation.toggled.connect(self.changed)
                 form.addRow(self.allow_rotation)

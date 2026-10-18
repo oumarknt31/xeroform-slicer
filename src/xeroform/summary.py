@@ -26,7 +26,7 @@ def summary_lines(result: SliceResult, config: SliceConfig, output: str | None =
         turned = sum(p.rotated for p in b.placements)
         lines.append(
             f"Build: {len(b.placements)} parts packed {b.height:.1f} mm high "
-            f"({turned} turned 90 deg), packing density {b.density:.1%}"
+            f"({turned} turned), packing density {b.density:.1%}"
         )
     vectors = sum(layer.num_hatch_vectors for layer in result.layers)
     lines.append(f"Sliced {len(result.layers)} layers ({vectors} hatch vectors)" + (f" -> {output}" if output else ""))
